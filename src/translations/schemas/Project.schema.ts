@@ -1,7 +1,11 @@
 import * as mongoose from 'mongoose';
+import { LanguageSchema } from './Language.schema';
+import { KeySchema } from './Key.schema';
 
 export const ProjectSchema = new mongoose.Schema({
-  name: String,
-  age: Number,
-  breed: String,
+  userId: String,
+  projectName: String,
+  projectId: String,
+  keys: [KeySchema],
+  languages: [LanguageSchema],
 });

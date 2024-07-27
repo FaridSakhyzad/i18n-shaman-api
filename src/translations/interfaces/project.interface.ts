@@ -1,7 +1,10 @@
 import { Document } from 'mongoose';
+import { IKey } from './key.interface';
 
 export interface IProject extends Document {
-  readonly name: string;
-  readonly age: number;
-  readonly breed: string;
+  projectName: string;
+  projectId: string;
+  userId: string;
+  keys: [IKey];
+  languages: [];
 }

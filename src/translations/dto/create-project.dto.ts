@@ -1,5 +1,5 @@
 export class CreateProjectDto {
-  name: string;
-  age: number;
-  breed: string;
+  userId: string;
+  projectName: string;
+  projectId: string;
 }
