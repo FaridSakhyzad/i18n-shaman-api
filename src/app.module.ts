@@ -5,9 +5,10 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 
 import { TranslationsModule } from './translations/module';
+import { AuthModule } from './auth/auth.module';
 
 @Module({
-  imports: [TranslationsModule, ConfigModule.forRoot()],
+  imports: [ConfigModule.forRoot(), TranslationsModule, AuthModule],
   controllers: [AppController],
   providers: [AppService],
 })
