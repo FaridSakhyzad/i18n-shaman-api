@@ -10,8 +10,3 @@ export interface IUser extends Document {
   password: string;
   settings: IUserSettings;
 }
-
-export interface IUserDataForClient extends IUser {
-  id: string;
-  login: string;
-}

@@ -6,9 +6,10 @@ import { AppService } from './app.service';
 
 import { TranslationsModule } from './translations/module';
 import { AuthModule } from './auth/auth.module';
+import { UserModule } from './user/user.module';
 
 @Module({
-  imports: [ConfigModule.forRoot(), TranslationsModule, AuthModule],
+  imports: [ConfigModule.forRoot(), TranslationsModule, AuthModule, UserModule],
   controllers: [AppController],
   providers: [AppService],
 })

@@ -1,7 +1,7 @@
 import { Connection } from 'mongoose';
 import { ProjectSchema } from '../translations/schemas/Project.schema';
 import { KeySchema } from '../translations/schemas/Key.schema';
-import { UserSchema } from '../auth/schemas/User.schema';
+import { UserSchema } from '../user/schemas/User.schema';
 
 export const Providers = [
   {

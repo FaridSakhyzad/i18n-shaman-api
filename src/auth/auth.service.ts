@@ -64,9 +64,14 @@ export class AuthService {
       return new ConflictException('User Not Found');
     }
 
+    const { settings } = user;
+
     return {
       id: user._id as string,
       login: user.login,
+      settings: {
+        language: settings.language,
+      },
     } as IUserDataForClient;
   }
 }
