@@ -23,9 +23,18 @@ export class Service {
     return this.projectModel.find(params).exec();
   }
 
-  async createProject(createProjectDto: CreateProjectDto): Promise<IProject> {
+  async createProject(createProjectDto: CreateProjectDto): Promise<IProject[]> {
     const createdProject = new this.projectModel(createProjectDto);
-    return createdProject.save();
+
+    await createdProject.save();
+
+    const userProjects = await this.projectModel.find({
+      userId: createProjectDto.userId,
+    });
+
+    console.log('userProjects', userProjects);
+
+    return userProjects;
   }
 
   async addProjectLanguage(addLanguageDto: AddLanguageDto) {

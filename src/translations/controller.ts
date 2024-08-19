@@ -14,20 +14,13 @@ export class CatsController {
   constructor(private readonly Service: Service) {}
 
   @Post('createProject')
-  createProject(@Body() createProjectDto: CreateProjectDto): Promise<IProject> {
-    const USER_ID = '1234567890abcdef';
-
-    return this.Service.createProject({
-      userId: USER_ID,
-      ...createProjectDto,
-    });
+  createProject(@Body() createProjectDto: CreateProjectDto): Promise<IProject[]> {
+    return this.Service.createProject(createProjectDto);
   }
 
   @Get('getUserProjects')
-  getUserProjects(): Promise<IProject[]> {
-    return this.Service.getUserProjects({
-      userId: USER_ID,
-    });
+  getUserProjects(@Query('userId') userId: string): Promise<IProject[]> {
+    return this.Service.getUserProjects({ userId });
   }
 
   @Get('getUserProjectById')
