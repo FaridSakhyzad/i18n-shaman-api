@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Query } from '@nestjs/common';
+import { Controller, Get, Post, Body, Query, Delete, Req, ConflictException } from "@nestjs/common";
 import { Service } from './service';
 import { IProject } from './interfaces/project.interface';
 import { IKey } from './interfaces/key.interface';
@@ -16,6 +16,28 @@ export class CatsController {
   @Post('createProject')
   createProject(@Body() createProjectDto: CreateProjectDto): Promise<IProject[]> {
     return this.Service.createProject(createProjectDto);
+  }
+
+  @Post('updateProject')
+  updateProject(@Body() projectData, @Req() req): Promise<IProject | Error> {
+    const { session, sessionID } = req;
+
+    if (!session || !sessionID || !session.userId) {
+      throw new ConflictException('Error: Denied');
+    }
+
+    return this.Service.updateProject(projectData);
+  }
+
+  @Delete('deleteProject')
+  deleteProject(@Query('projectId') projectId: string, @Req() req): Promise<IProject[] | Error> {
+    const { session, sessionID } = req;
+
+    if (!session || !sessionID || !session.userId) {
+      throw new ConflictException('Error: Denied');
+    }
+
+    return this.Service.deleteProject(projectId, session.userId);
   }
 
   @Get('getUserProjects')

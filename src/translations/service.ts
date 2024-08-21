@@ -32,7 +32,31 @@ export class Service {
       userId: createProjectDto.userId,
     });
 
-    console.log('userProjects', userProjects);
+    return userProjects;
+  }
+
+  async updateProject(data): Promise<IProject> {
+    const { projectId, ...dataPatch } = data;
+
+    await this.projectModel.updateOne(
+      {
+        projectId,
+      },
+      dataPatch,
+    );
+
+    return this.projectModel.findOne({ projectId });
+  }
+
+  async deleteProject(projectId, userId): Promise<IProject[]> {
+    await this.projectModel.deleteOne({
+      projectId,
+      userId,
+    });
+
+    const userProjects = await this.projectModel.find({
+      userId,
+    });
 
     return userProjects;
   }
