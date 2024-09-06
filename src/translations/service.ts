@@ -102,11 +102,15 @@ export class Service {
   }
 
   async getUserProjectById(
-    getProjectByIdDto: GetProjectByIdDto,
+    projectId: string,
+    userId: string,
   ): Promise<IProject> {
-    const { userId, projectId } = getProjectByIdDto;
-
-    const project = await this.projectModel.findOne(getProjectByIdDto).exec();
+    const project = await this.projectModel
+      .findOne({
+        projectId,
+        userId,
+      })
+      .exec();
 
     project.keys = (await this.keyModel.find({ userId, projectId })) as [IKey];
 

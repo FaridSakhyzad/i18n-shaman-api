@@ -1,12 +1,12 @@
 import { Module } from '@nestjs/common';
-import { CatsController } from './controller';
+import { TransController } from './controller';
 import { Service } from './service';
 import { Providers } from '../dbModule/providers';
 import { DatabaseModule } from '../dbModule/database.module';
 
 @Module({
   imports: [DatabaseModule],
-  controllers: [CatsController],
+  controllers: [TransController],
   providers: [Service, ...Providers],
 })
 export class TranslationsModule {}

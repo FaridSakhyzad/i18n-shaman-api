@@ -1,4 +1,13 @@
-import { Controller, Get, Post, Body, Query, Delete, Req, ConflictException } from "@nestjs/common";
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Query,
+  Delete,
+  Req,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { Service } from './service';
 import { IProject } from './interfaces/project.interface';
 import { IKey } from './interfaces/key.interface';
@@ -7,10 +16,8 @@ import { AddLanguageDto } from './dto/add-language.dto';
 import { AddKeyDto } from './dto/add-key.dto';
 import { UpdateKeyDto } from './dto/update-key.dto';
 
-const USER_ID = '1234567890abcdef';
-
 @Controller()
-export class CatsController {
+export class TransController {
   constructor(private readonly Service: Service) {}
 
   @Post('createProject')
@@ -23,7 +30,7 @@ export class CatsController {
     const { session, sessionID } = req;
 
     if (!session || !sessionID || !session.userId) {
-      throw new ConflictException('Error: Denied');
+      throw new UnauthorizedException('Error: Denied');
     }
 
     return this.Service.updateProject(projectData);
@@ -34,7 +41,7 @@ export class CatsController {
     const { session, sessionID } = req;
 
     if (!session || !sessionID || !session.userId) {
-      throw new ConflictException('Error: Denied');
+      throw new UnauthorizedException('Error: Denied');
     }
 
     return this.Service.deleteProject(projectId, session.userId);
@@ -46,11 +53,14 @@ export class CatsController {
   }
 
   @Get('getUserProjectById')
-  getUserProjectById(@Query('projectId') projectId: string): Promise<IProject> {
-    return this.Service.getUserProjectById({
-      userId: USER_ID,
-      projectId,
-    });
+  getUserProjectById(@Query('projectId') projectId: string, @Req() req): Promise<IProject> {
+    const { session, sessionID } = req;
+
+    if (!session || !sessionID || !session.userId) {
+      throw new UnauthorizedException('Error: Denied');
+    }
+
+    return this.Service.getUserProjectById(projectId, session.userId);
   }
 
   @Post('addProjectLanguage')
@@ -59,18 +69,21 @@ export class CatsController {
   }
 
   @Post('addProjectKey')
-  addProjectKey(@Body() addKeyDto: AddKeyDto): Promise<IKey> {
+  addProjectKey(@Body() addKeyDto: AddKeyDto, @Req() req): Promise<IKey> {
+    const { session, sessionID } = req;
+
+    if (!session || !sessionID || !session.userId) {
+      throw new UnauthorizedException('Error: Denied');
+    }
+
     return this.Service.addProjectKey({
-      userId: USER_ID,
+      userId: session.userId,
       ...addKeyDto,
     });
   }
 
   @Post('updateKey')
   updateKey(@Body() updateKeyDto: UpdateKeyDto) {
-    return this.Service.updateProjectKey({
-      userId: USER_ID,
-      ...updateKeyDto,
-    });
+    return this.Service.updateProjectKey(updateKeyDto);
   }
 }
