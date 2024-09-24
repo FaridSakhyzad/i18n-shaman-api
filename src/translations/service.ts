@@ -1,5 +1,5 @@
 import { Model } from 'mongoose';
-import { Injectable, Inject } from '@nestjs/common';
+import { Injectable, Inject, NotFoundException } from '@nestjs/common';
 
 import { IProject } from './interfaces/project.interface';
 import { IKey } from './interfaces/key.interface';
@@ -9,6 +9,7 @@ import { AddLanguageDto } from './dto/add-language.dto';
 import { AddKeyDto } from './dto/add-key.dto';
 import { GetProjectByIdDto } from './dto/get-project-by-id.dto';
 import { UpdateKeyDto } from './dto/update-key.dto';
+import { LanguageVisibilityDto } from "./dto/language-visibility.dto";
 
 @Injectable()
 export class Service {
@@ -61,27 +62,6 @@ export class Service {
     return userProjects;
   }
 
-  async addProjectLanguage(addLanguageDto: AddLanguageDto) {
-    const { projectId, id, label, baseLanguage } = addLanguageDto;
-
-    const result = await this.projectModel.updateOne(
-      { projectId },
-      {
-        $addToSet: {
-          languages: {
-            id,
-            label,
-            baseLanguage,
-          },
-        },
-      },
-    );
-
-    console.log('result', result);
-
-    return 'OK';
-  }
-
   async addProjectKey(addKeyDto: AddKeyDto) {
     const createdKey = new this.keyModel(addKeyDto);
 
@@ -115,5 +95,52 @@ export class Service {
     project.keys = (await this.keyModel.find({ userId, projectId })) as [IKey];
 
     return project;
+  }
+
+  async addProjectLanguage(addLanguageDto: AddLanguageDto) {
+    const { projectId, id, label, baseLanguage } = addLanguageDto;
+
+    const result = await this.projectModel.updateOne(
+      { projectId },
+      {
+        $addToSet: {
+          languages: {
+            id,
+            label,
+            baseLanguage,
+            visible: true,
+          },
+        },
+      },
+    );
+
+    console.log('result', result);
+
+    return 'OK';
+  }
+
+  async deleteProjectLanguage(projectId: string, languageId: string): Promise<IProject | Error> {
+    const result = await this.projectModel.findOneAndUpdate(
+      { projectId },
+      { $pull: { languages: { id: languageId } } },
+      { new: true },
+      )
+      .exec();
+
+    if (!result) {
+      throw new NotFoundException('Project or Language not found');
+    }
+
+    return result;
+  }
+
+  async setLanguageVisibility({ projectId, languageId, visible }: LanguageVisibilityDto):Promise<IProject> {
+    const result = await this.projectModel.findOneAndUpdate(
+      { projectId, 'languages.id': languageId },
+      { $set: { 'languages.$.visible': visible } },
+      { new: true },
+    );
+
+    return result;
   }
 }
