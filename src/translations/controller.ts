@@ -1,14 +1,4 @@
-import {
-  Controller,
-  Get,
-  Post,
-  Body,
-  Query,
-  Delete,
-  Req,
-  UnauthorizedException,
-  Put,
-} from '@nestjs/common';
+import { Controller, Get, Post, Body, Query, Delete, Req, UnauthorizedException } from '@nestjs/common';
 
 import { Service } from './service';
 import { IProject } from './interfaces/project.interface';
@@ -20,6 +10,7 @@ import { UpdateKeyDto } from './dto/update-key.dto';
 import { LanguageVisibilityDto } from './dto/language-visibility.dto';
 import { AddMultipleLanguagesDto } from './dto/add-multiple-languages.dto';
 import { MultipleLanguageVisibilityDto } from './dto/multiple-languages-visibility.dto';
+import { UpdateLanguageDto } from './dto/update-language.dto';
 
 @Controller()
 export class TransController {
@@ -88,8 +79,13 @@ export class TransController {
   }
 
   @Post('addLanguage')
-  addProjectLanguage(@Body() addLanguageDto: AddLanguageDto): Promise<string> {
-    return this.Service.addProjectLanguage(addLanguageDto);
+  addLanguage(@Body() addLanguageDto: AddLanguageDto): Promise<string> {
+    return this.Service.addLanguage(addLanguageDto);
+  }
+
+  @Post('updateLanguage')
+  updateLanguage(@Body() updateLanguageDto: UpdateLanguageDto): Promise<IProject | Error> {
+    return this.Service.updateLanguage(updateLanguageDto);
   }
 
   @Post('addMultipleLanguages')

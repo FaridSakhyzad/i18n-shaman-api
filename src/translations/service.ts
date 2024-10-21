@@ -11,6 +11,7 @@ import { UpdateKeyDto } from './dto/update-key.dto';
 import { LanguageVisibilityDto } from './dto/language-visibility.dto';
 import { AddMultipleLanguagesDto } from './dto/add-multiple-languages.dto';
 import { MultipleLanguageVisibilityDto } from './dto/multiple-languages-visibility.dto';
+import { UpdateLanguageDto } from "./dto/update-language.dto";
 
 @Injectable()
 export class Service {
@@ -66,8 +67,6 @@ export class Service {
   async addProjectKey(addKeyDto: AddKeyDto) {
     const createdKey = new this.keyModel(addKeyDto);
 
-    console.log('createdKey', createdKey);
-
     return await createdKey.save();
   }
 
@@ -101,7 +100,7 @@ export class Service {
     return project;
   }
 
-  async addProjectLanguage(addLanguageDto: AddLanguageDto) {
+  async addLanguage(addLanguageDto: AddLanguageDto) {
     const { projectId, id, label, baseLanguage, code } = addLanguageDto;
 
     const result = await this.projectModel.updateOne(
@@ -122,6 +121,22 @@ export class Service {
     console.log('result', result);
 
     return 'OK';
+  }
+
+  async updateLanguage(updateLanguageDto: UpdateLanguageDto): Promise<IProject | Error> {
+    const { projectId, ...language } = updateLanguageDto;
+
+    const result = await this.projectModel.findOneAndUpdate(
+      { projectId, 'languages.id': language.id },
+      { $set: { 'languages.$': language } },
+      { new: true },
+    );
+
+    if (!result) {
+      throw new NotFoundException('Project not found');
+    }
+
+    return result;
   }
 
   async addMultipleProjectLanguage(addMultipleLanguagesDto: AddMultipleLanguagesDto): Promise<IProject | Error> {
@@ -175,12 +190,8 @@ export class Service {
       };
     });
 
-    const bulkWriteResult = await this.projectModel.bulkWrite(bulkOps);
+    await this.projectModel.bulkWrite(bulkOps);
 
-    console.log('bulkWriteResult', bulkWriteResult);
-
-    const result = await this.projectModel.findOne({ projectId });
-
-    return result;
+    return await this.projectModel.findOne({ projectId });
   }
 }
