@@ -7,9 +7,10 @@ import { IKey } from './interfaces/key.interface';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { AddLanguageDto } from './dto/add-language.dto';
 import { AddKeyDto } from './dto/add-key.dto';
-import { GetProjectByIdDto } from './dto/get-project-by-id.dto';
 import { UpdateKeyDto } from './dto/update-key.dto';
-import { LanguageVisibilityDto } from "./dto/language-visibility.dto";
+import { LanguageVisibilityDto } from './dto/language-visibility.dto';
+import { AddMultipleLanguagesDto } from './dto/add-multiple-languages.dto';
+import { MultipleLanguageVisibilityDto } from './dto/multiple-languages-visibility.dto';
 
 @Injectable()
 export class Service {
@@ -65,6 +66,8 @@ export class Service {
   async addProjectKey(addKeyDto: AddKeyDto) {
     const createdKey = new this.keyModel(addKeyDto);
 
+    console.log('createdKey', createdKey);
+
     return await createdKey.save();
   }
 
@@ -81,10 +84,7 @@ export class Service {
     );
   }
 
-  async getUserProjectById(
-    projectId: string,
-    userId: string,
-  ): Promise<IProject> {
+  async getUserProjectById(projectId: string, userId: string): Promise<IProject> {
     const project = await this.projectModel
       .findOne({
         projectId,
@@ -92,13 +92,17 @@ export class Service {
       })
       .exec();
 
+    if (!project) {
+      throw new NotFoundException('Project not found');
+    }
+
     project.keys = (await this.keyModel.find({ userId, projectId })) as [IKey];
 
     return project;
   }
 
   async addProjectLanguage(addLanguageDto: AddLanguageDto) {
-    const { projectId, id, label, baseLanguage } = addLanguageDto;
+    const { projectId, id, label, baseLanguage, code } = addLanguageDto;
 
     const result = await this.projectModel.updateOne(
       { projectId },
@@ -108,6 +112,7 @@ export class Service {
             id,
             label,
             baseLanguage,
+            code,
             visible: true,
           },
         },
@@ -119,12 +124,26 @@ export class Service {
     return 'OK';
   }
 
-  async deleteProjectLanguage(projectId: string, languageId: string): Promise<IProject | Error> {
+  async addMultipleProjectLanguage(addMultipleLanguagesDto: AddMultipleLanguagesDto): Promise<IProject | Error> {
+    const { projectId, languages } = addMultipleLanguagesDto;
+
     const result = await this.projectModel.findOneAndUpdate(
       { projectId },
-      { $pull: { languages: { id: languageId } } },
+      { $push: { languages: { $each: languages } } },
       { new: true },
-      )
+    )
+      .exec();
+
+    if (!result) {
+      throw new NotFoundException('Project not found');
+    }
+
+    return result;
+  }
+
+  async deleteProjectLanguage(projectId: string, languageId: string): Promise<IProject | Error> {
+    const result = await this.projectModel
+      .findOneAndUpdate({ projectId }, { $pull: { languages: { id: languageId } } }, { new: true })
       .exec();
 
     if (!result) {
@@ -134,12 +153,33 @@ export class Service {
     return result;
   }
 
-  async setLanguageVisibility({ projectId, languageId, visible }: LanguageVisibilityDto):Promise<IProject> {
+  async setLanguageVisibility({ projectId, languageId, visible }: LanguageVisibilityDto): Promise<IProject> {
     const result = await this.projectModel.findOneAndUpdate(
       { projectId, 'languages.id': languageId },
       { $set: { 'languages.$.visible': visible } },
       { new: true },
     );
+
+    return result;
+  }
+
+  async setMultipleLanguagesVisibility({ projectId, data }: MultipleLanguageVisibilityDto): Promise<IProject> {
+    console.log(projectId, data);
+
+    const bulkOps = data.map(({ languageId, visible }) => {
+      return {
+        updateOne: {
+          filter: { projectId, 'languages.id': languageId },
+          update: { $set: { 'languages.$.visible': visible } },
+        },
+      };
+    });
+
+    const bulkWriteResult = await this.projectModel.bulkWrite(bulkOps);
+
+    console.log('bulkWriteResult', bulkWriteResult);
+
+    const result = await this.projectModel.findOne({ projectId });
 
     return result;
   }

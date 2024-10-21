@@ -6,4 +6,5 @@ export interface IKey extends Document {
   id: string;
   label: string;
   values: [any];
+  description: string;
 }

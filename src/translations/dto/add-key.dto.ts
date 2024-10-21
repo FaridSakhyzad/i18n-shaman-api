@@ -10,4 +10,5 @@ export class AddKeyDto {
       value: string;
     },
   ];
+  description: string;
 }

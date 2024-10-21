@@ -7,4 +7,5 @@ export const KeySchema = new mongoose.Schema({
   id: String,
   label: String,
   values: [KeyValueSchema],
+  description: String,
 });
