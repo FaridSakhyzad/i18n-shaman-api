@@ -74,7 +74,7 @@ export class TransController {
   }
 
   @Post('updateKey')
-  updateKey(@Body() updateKeyDto: UpdateKeyDto) {
+  updateKey(@Body() updateKeyDto: UpdateKeyDto): Promise<IKey> {
     return this.Service.updateProjectKey(updateKeyDto);
   }
 

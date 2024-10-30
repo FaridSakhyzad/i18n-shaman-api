@@ -70,17 +70,23 @@ export class Service {
     return await createdKey.save();
   }
 
-  async updateProjectKey(updateKeyDto: UpdateKeyDto) {
-    const { id, values } = updateKeyDto;
+  async updateProjectKey(updateKeyDto: UpdateKeyDto): Promise<IKey> {
+    const { id, label, description, values } = updateKeyDto;
 
-    return this.keyModel.updateOne(
+    const result = await this.keyModel.updateOne(
       {
         id,
       },
       {
         values,
+        label,
+        description,
       },
     );
+
+    const key = await this.keyModel.find({ id });
+
+    return key[0];
   }
 
   async getUserProjectById(projectId: string, userId: string): Promise<IProject> {
