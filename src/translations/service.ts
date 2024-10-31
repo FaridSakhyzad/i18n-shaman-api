@@ -1,7 +1,9 @@
+import * as archiver from 'archiver';
+
 import { Model } from 'mongoose';
 import { Injectable, Inject, NotFoundException } from '@nestjs/common';
 
-import { IProject } from './interfaces/project.interface';
+import { ILanguageMap, IProject } from './interfaces/project.interface';
 import { IKey } from './interfaces/key.interface';
 
 import { CreateProjectDto } from './dto/create-project.dto';
@@ -11,7 +13,7 @@ import { UpdateKeyDto } from './dto/update-key.dto';
 import { LanguageVisibilityDto } from './dto/language-visibility.dto';
 import { AddMultipleLanguagesDto } from './dto/add-multiple-languages.dto';
 import { MultipleLanguageVisibilityDto } from './dto/multiple-languages-visibility.dto';
-import { UpdateLanguageDto } from "./dto/update-language.dto";
+import { UpdateLanguageDto } from './dto/update-language.dto';
 
 @Injectable()
 export class Service {
@@ -199,5 +201,72 @@ export class Service {
     await this.projectModel.bulkWrite(bulkOps);
 
     return await this.projectModel.findOne({ projectId });
+  }
+
+  async exportProjectToJson(projectId: string, userId: string, res): Promise<void> {
+    const project = await this.projectModel
+      .findOne({
+        userId,
+        projectId,
+      })
+      .exec();
+
+    const { languages } = project;
+
+    const languagesMap: ILanguageMap = {};
+    const destinations = {} as { [key: string]: any };
+
+    for (let i = 0; i < languages.length; i++) {
+      const { id, code, customCode, customCodeEnabled } = languages[i];
+
+      languagesMap[id] = {
+        id,
+        code,
+        customCode,
+        customCodeEnabled,
+      };
+
+      destinations[`${customCodeEnabled ? customCode : code}`] = {};
+    }
+
+    const projectKeys = (await this.keyModel.find({ userId, projectId })) as [IKey];
+
+    for (let i = 0; i < projectKeys.length; i++) {
+      const { values, label } = projectKeys[i] as IKey;
+
+      for (let j = 0; j < values.length; j++) {
+        const { languageId, value } = values[j];
+
+        if (!languagesMap[languageId]) {
+          continue;
+        }
+
+        const { code, customCode, customCodeEnabled } = languagesMap[languageId];
+
+        const destination = customCodeEnabled ? customCode : code;
+
+        destinations[destination][label] = value;
+      }
+    }
+
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', 'attachment; filename=files.zip');
+
+    const archive = archiver('zip', {
+      zlib: { level: 9 },
+    });
+
+    archive.on('error', (err) => {
+      throw err;
+    });
+
+    archive.pipe(res);
+
+    for (const [fileName, data] of Object.entries(destinations)) {
+      const jsonContent = JSON.stringify(data, null, 2);
+      archive.append(jsonContent, { name: `${fileName}.json` });
+    }
+
+    await archive.finalize();
   }
 }

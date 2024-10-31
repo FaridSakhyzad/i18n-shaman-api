@@ -8,3 +8,14 @@ export interface IProject extends Document {
   keys: [IKey];
   languages: [];
 }
+
+export interface ILanguageMapItem {
+  id: string;
+  code: string;
+  customCode: string;
+  customCodeEnabled: boolean;
+}
+
+export interface ILanguageMap {
+  [key: string]: ILanguageMapItem;
+}

@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Query, Delete, Req, UnauthorizedException } from '@nestjs/common';
+import { Controller, Get, Post, Body, Query, Delete, Req, Res, UnauthorizedException } from '@nestjs/common';
 
 import { Service } from './service';
 import { IProject } from './interfaces/project.interface';
@@ -112,5 +112,16 @@ export class TransController {
   @Post('setMultipleLanguagesVisibility')
   setMultipleLanguagesVisibility(@Body() multipleLanguageVisibilityDto: MultipleLanguageVisibilityDto): Promise<IProject> {
     return this.Service.setMultipleLanguagesVisibility(multipleLanguageVisibilityDto);
+  }
+
+  @Get('exportProjectToJson')
+  async exportProjectToJson(@Query('projectId') projectId: string, @Req() req, @Res() res: Response): Promise<void> {
+    const { session, sessionID } = req;
+
+    if (!session || !sessionID || !session.userId) {
+      throw new UnauthorizedException('Error: Denied');
+    }
+
+    await this.Service.exportProjectToJson(projectId, session.userId, res);
   }
 }
