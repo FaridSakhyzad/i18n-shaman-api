@@ -151,11 +151,8 @@ export class Service {
   async addMultipleProjectLanguage(addMultipleLanguagesDto: AddMultipleLanguagesDto): Promise<IProject | Error> {
     const { projectId, languages } = addMultipleLanguagesDto;
 
-    const result = await this.projectModel.findOneAndUpdate(
-      { projectId },
-      { $push: { languages: { $each: languages } } },
-      { new: true },
-    )
+    const result = await this.projectModel
+      .findOneAndUpdate({ projectId }, { $push: { languages: { $each: languages } } }, { new: true })
       .exec();
 
     if (!result) {
@@ -319,7 +316,9 @@ export class Service {
         });
       }
 
-      const projectLanguageFromFilename = projectLanguages.find((language: IProjectLanguage) => language.code === filename)
+      const projectLanguageFromFilename = projectLanguages.find(
+        (language: IProjectLanguage) => language.code === filename,
+      );
 
       if (projectLanguageFromFilename) {
         localesToUpdate.push(projectLanguageFromFilename);
@@ -346,23 +345,22 @@ export class Service {
             label: key,
             values: [],
             description: '',
-          }
+          };
         }
 
         keysToAdd[key].values.push({
           languageId: languageFromFilename.id,
           value,
         });
-
       });
     }
 
-    const projectUpdateResult = await this.projectModel.findOneAndUpdate(
-      { projectId },
-      { $push: { languages: { $each: localesToCreate } } },
-      { new: true },
-    )
-    .exec();
+    const projectUpdateResult = await this.projectModel
+      .findOneAndUpdate(
+        { projectId },
+        { $push: { languages: { $each: localesToCreate } } },
+        { new: true })
+      .exec();
 
     const keysToAddArray = [];
 
