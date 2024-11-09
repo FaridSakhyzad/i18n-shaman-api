@@ -9,6 +9,21 @@ export interface IProject extends Document {
   languages: [];
 }
 
+export interface ILanguage {
+  id: string;
+  label: string;
+  code: string;
+}
+
+export interface IProjectLanguage extends ILanguage {
+  baseLanguage: boolean;
+  visible: boolean;
+  customCodeEnabled: boolean;
+  customLabelEnabled: boolean;
+  customCode: string;
+  customLabel: string;
+}
+
 export interface ILanguageMapItem {
   id: string;
   code: string;

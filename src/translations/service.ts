@@ -3,7 +3,7 @@ import * as archiver from 'archiver';
 import { Model } from 'mongoose';
 import { Injectable, Inject, NotFoundException } from '@nestjs/common';
 
-import { ILanguageMap, IProject } from './interfaces/project.interface';
+import { ILanguage, ILanguageMap, IProject, IProjectLanguage } from './interfaces/project.interface';
 import { IKey } from './interfaces/key.interface';
 
 import { CreateProjectDto } from './dto/create-project.dto';
@@ -14,6 +14,7 @@ import { LanguageVisibilityDto } from './dto/language-visibility.dto';
 import { AddMultipleLanguagesDto } from './dto/add-multiple-languages.dto';
 import { MultipleLanguageVisibilityDto } from './dto/multiple-languages-visibility.dto';
 import { UpdateLanguageDto } from './dto/update-language.dto';
+import { IRawLanguage } from './interfaces/rawLanguage.interface';
 
 @Injectable()
 export class Service {
@@ -22,6 +23,8 @@ export class Service {
     private projectModel: Model<IProject>,
     @Inject('KEY_MODEL')
     private keyModel: Model<IKey>,
+    @Inject('RAW_LANGUAGE_MODEL')
+    private rawLanguageModel: Model<IRawLanguage>,
   ) {}
 
   async getUserProjects(params): Promise<IProject[]> {
@@ -125,8 +128,6 @@ export class Service {
         },
       },
     );
-
-    console.log('result', result);
 
     return 'OK';
   }
@@ -268,5 +269,107 @@ export class Service {
     }
 
     await archive.finalize();
+  }
+
+  async addMultipleRawLanguages(data: any) {
+    return await this.rawLanguageModel.insertMany(data);
+  }
+
+  async getAppLanguagesData(): Promise<ILanguage[]> {
+    const result = await this.rawLanguageModel.find({});
+
+    return result.map(({ id, code, label }) => ({ id, code, label }));
+  }
+
+  async importDataToProject(data: any) {
+    const { projectId, userId, files } = data;
+
+    const project: IProject = await this.projectModel
+      .findOne({
+        projectId,
+      })
+      .exec();
+
+    const { languages: projectLanguages } = project;
+
+    const appLanguages = await this.getAppLanguagesData();
+
+    const localesToCreate = [];
+    const localesToUpdate = [];
+    const keysToAdd = {};
+
+    for (let i = 0; i < files.length; i++) {
+      const { originalname, buffer } = files[i];
+
+      const lastDotIndex = originalname.lastIndexOf('.');
+
+      const filename = originalname.slice(0, lastDotIndex);
+
+      const newLanguageFromFilename = appLanguages.find((language: ILanguage) => language.code === filename);
+
+      if (newLanguageFromFilename) {
+        localesToCreate.push({
+          baseLanguage: false,
+          visible: true,
+          customCodeEnabled: false,
+          customLabelEnabled: false,
+          customCode: '',
+          customLabel: '',
+          ...newLanguageFromFilename,
+        });
+      }
+
+      const projectLanguageFromFilename = projectLanguages.find((language: IProjectLanguage) => language.code === filename)
+
+      if (projectLanguageFromFilename) {
+        localesToUpdate.push(projectLanguageFromFilename);
+      }
+
+      const languageFromFilename = newLanguageFromFilename || projectLanguageFromFilename;
+
+      const fileContent = buffer.toString('utf-8');
+
+      let data = null;
+
+      try {
+        data = JSON.parse(fileContent);
+      } catch (e) {
+        console.error('ERROR DECODING JSON FILE', e);
+      }
+
+      Object.entries(data).forEach(([key, value]) => {
+        if (keysToAdd[key] === undefined) {
+          keysToAdd[key] = {
+            userId,
+            projectId,
+            id: Math.random().toString(16).substring(2),
+            label: key,
+            values: [],
+            description: '',
+          }
+        }
+
+        keysToAdd[key].values.push({
+          languageId: languageFromFilename.id,
+          value,
+        });
+
+      });
+    }
+
+    const projectUpdateResult = await this.projectModel.findOneAndUpdate(
+      { projectId },
+      { $push: { languages: { $each: localesToCreate } } },
+      { new: true },
+    )
+    .exec();
+
+    const keysToAddArray = [];
+
+    Object.entries(keysToAdd).forEach(([key, value]) => {
+      keysToAddArray.push(value);
+    });
+
+    return await this.keyModel.insertMany(keysToAddArray);
   }
 }

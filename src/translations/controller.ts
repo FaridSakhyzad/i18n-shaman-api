@@ -1,7 +1,20 @@
-import { Controller, Get, Post, Body, Query, Delete, Req, Res, UnauthorizedException } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Query,
+  Delete,
+  Req,
+  Res,
+  UploadedFiles,
+  UseInterceptors,
+  UnauthorizedException,
+} from '@nestjs/common';
+import { FilesInterceptor } from '@nestjs/platform-express';
 
 import { Service } from './service';
-import { IProject } from './interfaces/project.interface';
+import { ILanguage, IProject } from './interfaces/project.interface';
 import { IKey } from './interfaces/key.interface';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { AddLanguageDto } from './dto/add-language.dto';
@@ -11,6 +24,7 @@ import { LanguageVisibilityDto } from './dto/language-visibility.dto';
 import { AddMultipleLanguagesDto } from './dto/add-multiple-languages.dto';
 import { MultipleLanguageVisibilityDto } from './dto/multiple-languages-visibility.dto';
 import { UpdateLanguageDto } from './dto/update-language.dto';
+import { get } from 'mongoose';
 
 @Controller()
 export class TransController {
@@ -123,5 +137,40 @@ export class TransController {
     }
 
     await this.Service.exportProjectToJson(projectId, session.userId, res);
+  }
+
+  @Post('importJsonDataToProject')
+  @UseInterceptors(FilesInterceptor('files', 10))
+  async importJsonDataToProject(
+    @Body('projectId') projectId: string,
+    @Req() req,
+    @UploadedFiles() files: Express.Multer.File[]
+  ) {
+    const { session, sessionID } = req;
+
+    if (!session || !sessionID || !session.userId) {
+      throw new UnauthorizedException('Error: Denied');
+    }
+
+    return await this.Service.importDataToProject({ projectId, userId: session.userId, files });
+  }
+
+  @Post('addMultipleRawLanguages')
+  async addMultipleRawLanguages(
+    @Body() data: any[],
+    @Req() req,
+  ) {
+    const { session, sessionID } = req;
+
+    if (!session || !sessionID || !session.userId) {
+      throw new UnauthorizedException('Error: Denied');
+    }
+
+    return this.Service.addMultipleRawLanguages(data);
+  }
+
+  @Get('getAppLanguagesData')
+  async getAppLanguagesData(): Promise<ILanguage[]> {
+    return this.Service.getAppLanguagesData();
   }
 }
