@@ -108,7 +108,11 @@ export class TransController {
   }
 
   @Delete('deleteLanguage')
-  deleteProjectLanguage(@Query('languageId') languageId: string, @Query('projectId') projectId: string, @Req() req): Promise<IProject | Error> {
+  deleteProjectLanguage(
+    @Query('languageId') languageId: string,
+    @Query('projectId') projectId: string,
+    @Req() req,
+  ): Promise<IProject | Error> {
     const { session, sessionID } = req;
 
     if (!session || !sessionID || !session.userId) {
@@ -124,7 +128,9 @@ export class TransController {
   }
 
   @Post('setMultipleLanguagesVisibility')
-  setMultipleLanguagesVisibility(@Body() multipleLanguageVisibilityDto: MultipleLanguageVisibilityDto): Promise<IProject> {
+  setMultipleLanguagesVisibility(
+    @Body() multipleLanguageVisibilityDto: MultipleLanguageVisibilityDto,
+  ): Promise<IProject> {
     return this.Service.setMultipleLanguagesVisibility(multipleLanguageVisibilityDto);
   }
 
@@ -144,7 +150,7 @@ export class TransController {
   async importJsonDataToProject(
     @Body('projectId') projectId: string,
     @Req() req,
-    @UploadedFiles() files: Express.Multer.File[]
+    @UploadedFiles() files: Express.Multer.File[],
   ) {
     const { session, sessionID } = req;
 
@@ -156,10 +162,7 @@ export class TransController {
   }
 
   @Post('addMultipleRawLanguages')
-  async addMultipleRawLanguages(
-    @Body() data: any[],
-    @Req() req,
-  ) {
+  async addMultipleRawLanguages(@Body() data: any[], @Req() req) {
     const { session, sessionID } = req;
 
     if (!session || !sessionID || !session.userId) {
