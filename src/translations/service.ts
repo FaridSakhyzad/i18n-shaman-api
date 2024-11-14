@@ -15,6 +15,7 @@ import { AddMultipleLanguagesDto } from './dto/add-multiple-languages.dto';
 import { MultipleLanguageVisibilityDto } from './dto/multiple-languages-visibility.dto';
 import { UpdateLanguageDto } from './dto/update-language.dto';
 import { IRawLanguage } from './interfaces/rawLanguage.interface';
+import { IKeyValue } from './interfaces/keyValue.interface';
 
 @Injectable()
 export class Service {
@@ -23,6 +24,8 @@ export class Service {
     private projectModel: Model<IProject>,
     @Inject('KEY_MODEL')
     private keyModel: Model<IKey>,
+    @Inject('KEY_VALUE_MODEL')
+    private keyValueModel: Model<IKeyValue>,
     @Inject('RAW_LANGUAGE_MODEL')
     private rawLanguageModel: Model<IRawLanguage>,
   ) {}
@@ -69,25 +72,66 @@ export class Service {
     return userProjects;
   }
 
-  async addProjectKey(addKeyDto: AddKeyDto) {
+  async createProjectKey(addKeyDto: AddKeyDto) {
+    const { id, userId, projectId, values } = addKeyDto;
+
     const createdKey = new this.keyModel(addKeyDto);
 
-    return await createdKey.save();
+    const keyValuesData = values.map((value) => ({
+      id: Math.random().toString(16).substring(2),
+      userId,
+      projectId,
+      keyId: id,
+      ...value,
+    }));
+
+    const valuesInsertResult = await this.keyValueModel.insertMany(keyValuesData);
+
+    const keyCreateResult = await createdKey.save();
+
+    return {
+      valuesInsertResult,
+      keyCreateResult,
+    };
   }
 
   async updateProjectKey(updateKeyDto: UpdateKeyDto): Promise<IKey> {
-    const { id, label, description, values } = updateKeyDto;
+    const { id, label, description, values, userId } = updateKeyDto;
 
     const result = await this.keyModel.updateOne(
       {
         id,
       },
       {
-        values,
         label,
         description,
       },
     );
+
+    const bulkOps = values.map((item) => {
+      const $setOnInsert = {};
+
+      if (!item.id) {
+        $setOnInsert['userId'] = userId;
+      }
+
+      if (!item.id) {
+        $setOnInsert['id'] = Math.random().toString(16).substring(2);
+      }
+
+      return {
+        updateOne: {
+          filter: { id: item.id },
+          update: {
+            $set: item,
+            $setOnInsert,
+          },
+          upsert: true,
+        },
+      };
+    });
+
+    await this.keyValueModel.bulkWrite(bulkOps);
 
     const key = await this.keyModel.find({ id });
 
@@ -106,9 +150,63 @@ export class Service {
       throw new NotFoundException('Project not found');
     }
 
-    project.keys = (await this.keyModel.find({ userId, projectId })) as [IKey];
+    const keys: IKey[] = await this.keyModel.find({ userId, projectId });
 
-    return project;
+    const valuesAggregated = await this.keyValueModel.aggregate([
+      {
+        $match: {
+          userId,
+          projectId,
+        },
+      },
+      {
+        $group: {
+          _id: '$keyId',
+          items: { $push: '$$ROOT' },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          parentId: '$_id',
+          items: 1,
+        },
+      },
+      {
+        $project: {
+          parentId: 1,
+          items: {
+            $arrayToObject: {
+              $map: {
+                input: '$items',
+                as: 'item',
+                in: ['$$item.languageId', '$$item'],
+              },
+            },
+          },
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          result: { $push: { k: '$parentId', v: '$items' } },
+        },
+      },
+      {
+        $project: {
+          result: { $arrayToObject: '$result' },
+        },
+      },
+      {
+        $replaceRoot: { newRoot: '$result' },
+      },
+    ]);
+
+    return {
+      ...project.toObject(),
+      keys,
+      values: valuesAggregated[0],
+    } as IProject;
   }
 
   async addLanguage(addLanguageDto: AddLanguageDto) {
@@ -129,7 +227,7 @@ export class Service {
       },
     );
 
-    return 'OK';
+    return result;
   }
 
   async updateLanguage(updateLanguageDto: UpdateLanguageDto): Promise<IProject | Error> {
@@ -148,7 +246,7 @@ export class Service {
     return result;
   }
 
-  async addMultipleProjectLanguage(addMultipleLanguagesDto: AddMultipleLanguagesDto): Promise<IProject | Error> {
+  async addMultipleProjectLanguages(addMultipleLanguagesDto: AddMultipleLanguagesDto): Promise<IProject | Error> {
     const { projectId, languages } = addMultipleLanguagesDto;
 
     const result = await this.projectModel
@@ -356,10 +454,7 @@ export class Service {
     }
 
     const projectUpdateResult = await this.projectModel
-      .findOneAndUpdate(
-        { projectId },
-        { $push: { languages: { $each: localesToCreate } } },
-        { new: true })
+      .findOneAndUpdate({ projectId }, { $push: { languages: { $each: localesToCreate } } }, { new: true })
       .exec();
 
     const keysToAddArray = [];

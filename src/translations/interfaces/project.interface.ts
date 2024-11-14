@@ -5,7 +5,8 @@ export interface IProject extends Document {
   projectName: string;
   projectId: string;
   userId: string;
-  keys: [IKey];
+  keys: IKey[];
+  values?: any;
   languages: [];
 }
 

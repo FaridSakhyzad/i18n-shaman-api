@@ -73,15 +73,15 @@ export class TransController {
     return this.Service.getUserProjectById(projectId, session.userId);
   }
 
-  @Post('addProjectKey')
-  addProjectKey(@Body() addKeyDto: AddKeyDto, @Req() req): Promise<IKey> {
+  @Post('createProjectKey')
+  createProjectKey(@Body() addKeyDto: AddKeyDto, @Req() req) {
     const { session, sessionID } = req;
 
     if (!session || !sessionID || !session.userId) {
       throw new UnauthorizedException('Error: Denied');
     }
 
-    return this.Service.addProjectKey({
+    return this.Service.createProjectKey({
       userId: session.userId,
       ...addKeyDto,
     });
@@ -93,7 +93,7 @@ export class TransController {
   }
 
   @Post('addLanguage')
-  addLanguage(@Body() addLanguageDto: AddLanguageDto): Promise<string> {
+  addLanguage(@Body() addLanguageDto: AddLanguageDto) {
     return this.Service.addLanguage(addLanguageDto);
   }
 
@@ -104,7 +104,7 @@ export class TransController {
 
   @Post('addMultipleLanguages')
   addMultipleProjectLanguages(@Body() addMultipleLanguagesDto: AddMultipleLanguagesDto): Promise<IProject | Error> {
-    return this.Service.addMultipleProjectLanguage(addMultipleLanguagesDto);
+    return this.Service.addMultipleProjectLanguages(addMultipleLanguagesDto);
   }
 
   @Delete('deleteLanguage')
