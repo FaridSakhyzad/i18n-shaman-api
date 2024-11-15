@@ -95,68 +95,13 @@ export class Service {
     };
   }
 
-  async updateProjectKey(updateKeyDto: UpdateKeyDto): Promise<IKey> {
-    const { id, label, description, values, userId } = updateKeyDto;
-
-    const result = await this.keyModel.updateOne(
-      {
-        id,
-      },
-      {
-        label,
-        description,
-      },
-    );
-
-    const bulkOps = values.map((item) => {
-      const $setOnInsert = {};
-
-      if (!item.id) {
-        $setOnInsert['userId'] = userId;
-      }
-
-      if (!item.id) {
-        $setOnInsert['id'] = Math.random().toString(16).substring(2);
-      }
-
-      return {
-        updateOne: {
-          filter: { id: item.id },
-          update: {
-            $set: item,
-            $setOnInsert,
-          },
-          upsert: true,
-        },
-      };
-    });
-
-    await this.keyValueModel.bulkWrite(bulkOps);
-
-    const key = await this.keyModel.find({ id });
-
-    return key[0];
-  }
-
-  async getUserProjectById(projectId: string, userId: string): Promise<IProject> {
-    const project = await this.projectModel
-      .findOne({
-        projectId,
-        userId,
-      })
-      .exec();
-
-    if (!project) {
-      throw new NotFoundException('Project not found');
-    }
-
-    const keys: IKey[] = await this.keyModel.find({ userId, projectId });
-
-    const valuesAggregated = await this.keyValueModel.aggregate([
+  async getAggregatedValues(userId: string, projectId: string, parentId: string) {
+    const aggregatedValues = await this.keyValueModel.aggregate([
       {
         $match: {
           userId,
           projectId,
+          parentId,
         },
       },
       {
@@ -202,11 +147,104 @@ export class Service {
       },
     ]);
 
+    return aggregatedValues;
+  }
+
+  async updateProjectKey(updateKeyDto: UpdateKeyDto) {
+    const {
+      id,
+      label,
+      description,
+      values,
+      userId,
+      projectId,
+      parentId,
+    } = updateKeyDto;
+
+    const result = await this.keyModel.updateOne(
+      {
+        id,
+      },
+      {
+        label,
+        description,
+      },
+    );
+    const bulkOps = values.map((item) => {
+      const $setOnInsert = {};
+
+      if (!item.userId) {
+        $setOnInsert['userId'] = userId;
+      }
+
+      if (!item.id) {
+        $setOnInsert['id'] = Math.random().toString(16).substring(2);
+      }
+
+      return {
+        updateOne: {
+          filter: { id: item.id },
+          update: {
+            $set: item,
+            $setOnInsert,
+          },
+          upsert: true,
+        },
+      };
+    });
+
+    await this.keyValueModel.bulkWrite(bulkOps);
+
+    const key = await this.keyModel.find({ id });
+
+    const aggregatedValues = await this.getAggregatedValues(userId, projectId, parentId);
+
+    return {
+      ...key[0].toObject(),
+      values: aggregatedValues.length > 0 && aggregatedValues[0][id] ? aggregatedValues[0][id] : [],
+    };
+  }
+
+  async getUserProjectById(projectId: string, userId: string): Promise<IProject> {
+    const project = await this.projectModel
+      .findOne({
+        projectId,
+        userId,
+      })
+      .exec();
+
+    if (!project) {
+      throw new NotFoundException('Project not found');
+    }
+
+    const keys: IKey[] = await this.keyModel.find({
+      userId,
+      projectId,
+      parentId: projectId, //Project level keys only
+    });
+
+    const aggregatedValues = await this.getAggregatedValues(userId, projectId, projectId);
+
     return {
       ...project.toObject(),
       keys,
-      values: valuesAggregated[0],
+      values: aggregatedValues[0],
     } as IProject;
+  }
+
+  async getComponentData(projectId: string, userId: string, componentId: string) {
+    const keys = await this.keyModel.find({
+      projectId,
+      userId,
+      parentId: componentId,
+    });
+
+    const aggregatedValues = await this.getAggregatedValues(userId, projectId, componentId);
+
+    return {
+      keys,
+      values: aggregatedValues[0],
+    };
   }
 
   async addLanguage(addLanguageDto: AddLanguageDto) {
@@ -299,7 +337,8 @@ export class Service {
     return await this.projectModel.findOne({ projectId });
   }
 
-  async exportProjectToJson(projectId: string, userId: string, res): Promise<void> {
+  async exportProjectToJson(projectId: string, userId: string, res) {
+    /*
     const project = await this.projectModel
       .findOne({
         userId,
@@ -364,6 +403,7 @@ export class Service {
     }
 
     await archive.finalize();
+    */
   }
 
   async addMultipleRawLanguages(data: any) {

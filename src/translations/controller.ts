@@ -73,6 +73,22 @@ export class TransController {
     return this.Service.getUserProjectById(projectId, session.userId);
   }
 
+  @Get('getComponentData')
+  getComponentData(
+    @Query('projectId') projectId: string,
+    @Query('userId') userId: string,
+    @Query('componentId') componentId: string,
+    @Req() req,
+  ) {
+    const { session, sessionID } = req;
+
+    if (!session || !sessionID || !session.userId) {
+      throw new UnauthorizedException('Error: Denied');
+    }
+
+    return this.Service.getComponentData(projectId, userId, componentId);
+  }
+
   @Post('createProjectKey')
   createProjectKey(@Body() addKeyDto: AddKeyDto, @Req() req) {
     const { session, sessionID } = req;
@@ -88,7 +104,7 @@ export class TransController {
   }
 
   @Post('updateKey')
-  updateKey(@Body() updateKeyDto: UpdateKeyDto): Promise<IKey> {
+  updateKey(@Body() updateKeyDto: UpdateKeyDto) {
     return this.Service.updateProjectKey(updateKeyDto);
   }
 
@@ -141,8 +157,6 @@ export class TransController {
     if (!session || !sessionID || !session.userId) {
       throw new UnauthorizedException('Error: Denied');
     }
-
-    await this.Service.exportProjectToJson(projectId, session.userId, res);
   }
 
   @Post('importJsonDataToProject')

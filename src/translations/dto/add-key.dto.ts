@@ -1,6 +1,7 @@
 export class AddKeyDto {
   userId: string;
   projectId: string;
+  parentId: string;
   id: string;
   label: string;
   values: [
@@ -11,4 +12,5 @@ export class AddKeyDto {
     },
   ];
   description: string;
+  type: string;
 }

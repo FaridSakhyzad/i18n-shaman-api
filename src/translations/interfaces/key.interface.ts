@@ -1,10 +1,13 @@
 import { Document } from 'mongoose';
+import { IKeyValue } from './keyValue.interface';
 
 export interface IKey extends Document {
   userId: string;
   projectId: string;
+  parentId: string;
   id: string;
   label: string;
-  values: [any];
+  values: { [key: string]: IKeyValue };
   description: string;
+  type: string;
 }
