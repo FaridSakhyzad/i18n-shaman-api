@@ -19,8 +19,6 @@ export class UserService {
       },
     );
 
-    console.log(result);
-
     return 'OK';
   }
 }

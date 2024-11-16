@@ -73,9 +73,11 @@ export class Service {
   }
 
   async createProjectKey(addKeyDto: AddKeyDto) {
-    const { id, userId, projectId, values } = addKeyDto;
+    const { id, userId, projectId } = addKeyDto;
 
-    const createdKey = new this.keyModel(addKeyDto);
+    const { values, ...keyData } = addKeyDto;
+
+    const createdKey = new this.keyModel(keyData);
 
     const keyValuesData = values.map((value) => ({
       id: Math.random().toString(16).substring(2),
@@ -95,13 +97,14 @@ export class Service {
     };
   }
 
-  async getAggregatedValues(userId: string, projectId: string, parentId: string) {
+  async getAggregatedValues(userId: string, projectId: string, parentIds: string[], keyIds?: string[]) {
     const aggregatedValues = await this.keyValueModel.aggregate([
       {
         $match: {
           userId,
           projectId,
-          parentId,
+          parentId: { $in: parentIds },
+          ...(keyIds ? { keyId: { $in: keyIds } } : {}),
         },
       },
       {
@@ -151,15 +154,7 @@ export class Service {
   }
 
   async updateProjectKey(updateKeyDto: UpdateKeyDto) {
-    const {
-      id,
-      label,
-      description,
-      values,
-      userId,
-      projectId,
-      parentId,
-    } = updateKeyDto;
+    const { id, label, description, values, userId, projectId, parentId } = updateKeyDto;
 
     const result = await this.keyModel.updateOne(
       {
@@ -197,7 +192,7 @@ export class Service {
 
     const key = await this.keyModel.find({ id });
 
-    const aggregatedValues = await this.getAggregatedValues(userId, projectId, parentId);
+    const aggregatedValues = await this.getAggregatedValues(userId, projectId, [parentId]);
 
     return {
       ...key[0].toObject(),
@@ -223,7 +218,7 @@ export class Service {
       parentId: projectId, //Project level keys only
     });
 
-    const aggregatedValues = await this.getAggregatedValues(userId, projectId, projectId);
+    const aggregatedValues = await this.getAggregatedValues(userId, projectId, [projectId]);
 
     return {
       ...project.toObject(),
@@ -239,7 +234,7 @@ export class Service {
       parentId: componentId,
     });
 
-    const aggregatedValues = await this.getAggregatedValues(userId, projectId, componentId);
+    const aggregatedValues = await this.getAggregatedValues(userId, projectId, [componentId]);
 
     return {
       keys,
@@ -321,8 +316,6 @@ export class Service {
   }
 
   async setMultipleLanguagesVisibility({ projectId, data }: MultipleLanguageVisibilityDto): Promise<IProject> {
-    console.log(projectId, data);
-
     const bulkOps = data.map(({ languageId, visible }) => {
       return {
         updateOne: {
@@ -337,37 +330,18 @@ export class Service {
     return await this.projectModel.findOne({ projectId });
   }
 
-  async exportProjectToJson(projectId: string, userId: string, res) {
-    /*
-    const project = await this.projectModel
-      .findOne({
-        userId,
-        projectId,
-      })
-      .exec();
+  getShallowFileKeyValueStructure(keys, aggregatedValues, languagesMap) {
+    const result = {} as { [key: string]: any };
 
-    const { languages } = project;
+    for (let i = 0; i < keys.length; i++) {
+      const { id, label } = keys[i] as IKey;
+      let values = aggregatedValues[id];
 
-    const languagesMap: ILanguageMap = {};
-    const destinations = {} as { [key: string]: any };
+      if (!values) {
+        continue;
+      }
 
-    for (let i = 0; i < languages.length; i++) {
-      const { id, code, customCode, customCodeEnabled } = languages[i];
-
-      languagesMap[id] = {
-        id,
-        code,
-        customCode,
-        customCodeEnabled,
-      };
-
-      destinations[`${customCodeEnabled ? customCode : code}`] = {};
-    }
-
-    const projectKeys = (await this.keyModel.find({ userId, projectId })) as [IKey];
-
-    for (let i = 0; i < projectKeys.length; i++) {
-      const { values, label } = projectKeys[i] as IKey;
+      values = Object.entries(values).map(([key, value]) => value) as IKeyValue[];
 
       for (let j = 0; j < values.length; j++) {
         const { languageId, value } = values[j];
@@ -380,9 +354,112 @@ export class Service {
 
         const destination = customCodeEnabled ? customCode : code;
 
-        destinations[destination][label] = value;
+        if (!result[destination]) {
+          result[destination] = {};
+        }
+
+        result[destination][label] = value;
       }
     }
+
+    return result;
+  }
+
+  getFolderLanguageKeyValueStructure(components, keys, aggregatedValues, languagesMap) {
+    const result = {};
+
+    const aggregatedComponents = {};
+
+    for (let i = 0; i < components.length; i++) {
+      const { id } = components[i];
+      aggregatedComponents[id] = components[i];
+    }
+
+    for (let i = 0; i < keys.length; i++) {
+      const { id: keyId, label: keyLabel, parentId: parentComponentId } = keys[i] as IKey;
+      let values = aggregatedValues[keyId];
+
+      if (!values) {
+        continue;
+      }
+
+      values = Object.entries(values).map(([key, value]) => value) as IKeyValue[];
+
+      for (let j = 0; j < values.length; j++) {
+        const { languageId, value } = values[j];
+
+        if (!languagesMap[languageId]) {
+          continue;
+        }
+
+        const { code, customCode, customCodeEnabled } = languagesMap[languageId];
+
+        const destinationFolder = customCodeEnabled ? customCode : code;
+
+        if (!result[destinationFolder]) {
+          result[destinationFolder] = {};
+        }
+
+        const destinationFile = aggregatedComponents[parentComponentId].label;
+
+        if (!result[destinationFolder][destinationFile]) {
+          result[destinationFolder][destinationFile] = {};
+        }
+
+        result[destinationFolder][destinationFile][keyLabel] = value;
+      }
+    }
+
+    return result;
+  }
+
+  async exportProjectToJson(projectId: string, userId: string, res) {
+    const project = await this.projectModel
+      .findOne({
+        userId,
+        projectId,
+      })
+      .exec();
+
+    const { languages } = project;
+
+    const languagesMap: ILanguageMap = {};
+
+    for (let i = 0; i < languages.length; i++) {
+      const { id, code, customCode, customCodeEnabled } = languages[i];
+
+      languagesMap[id] = {
+        id,
+        code,
+        customCode,
+        customCodeEnabled,
+      };
+    }
+
+    const keys = (await this.keyModel.find({ userId, projectId, type: 'string' })) as [IKey];
+    const [aggregatedProjectValues] = (await this.getAggregatedValues(userId, projectId, [projectId])) || [];
+
+    const localeFilesStructure = this.getShallowFileKeyValueStructure(keys, aggregatedProjectValues, languagesMap);
+
+    const components = (await this.keyModel.find({ userId, projectId, type: 'component' })) as [IKey];
+
+    const componentIdsArray = components.map(({ id }) => id);
+
+    const componentsInnerKeys = (await this.keyModel.find({
+      userId,
+      projectId,
+      type: 'string',
+      parentId: { $in: componentIdsArray },
+    })) as [IKey];
+
+    const [aggregatedComponentsValues] = (await this.getAggregatedValues(userId, projectId, componentIdsArray)) || [];
+
+    const localeFoldersComponentStructure = this.getFolderLanguageKeyValueStructure(
+      components,
+      componentsInnerKeys,
+      aggregatedComponentsValues,
+      languagesMap,
+    );
 
     res.setHeader('Content-Type', 'application/zip');
     res.setHeader('Content-Disposition', 'attachment; filename=files.zip');
@@ -397,13 +474,19 @@ export class Service {
 
     archive.pipe(res);
 
-    for (const [fileName, data] of Object.entries(destinations)) {
+    for (const [fileName, data] of Object.entries(localeFilesStructure)) {
       const jsonContent = JSON.stringify(data, null, 2);
       archive.append(jsonContent, { name: `${fileName}.json` });
     }
 
+    for (const [folderName, filesData] of Object.entries(localeFoldersComponentStructure)) {
+      for (const [fileName, file] of Object.entries(filesData)) {
+        const jsonContent = JSON.stringify(file, null, 2);
+        archive.append(jsonContent, { name: `${folderName}/${fileName}.json` });
+      }
+    }
+
     await archive.finalize();
-    */
   }
 
   async addMultipleRawLanguages(data: any) {

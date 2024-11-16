@@ -157,6 +157,8 @@ export class TransController {
     if (!session || !sessionID || !session.userId) {
       throw new UnauthorizedException('Error: Denied');
     }
+
+    await this.Service.exportProjectToJson(projectId, session.userId, res);
   }
 
   @Post('importJsonDataToProject')
