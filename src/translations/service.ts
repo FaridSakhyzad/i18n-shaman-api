@@ -8,7 +8,7 @@ import { IKey } from './interfaces/key.interface';
 
 import { CreateProjectDto } from './dto/create-project.dto';
 import { AddLanguageDto } from './dto/add-language.dto';
-import { AddKeyDto } from './dto/add-key.dto';
+import { CreateEntityDto } from './dto/create-entity.dto';
 import { UpdateKeyDto } from './dto/update-key.dto';
 import { LanguageVisibilityDto } from './dto/language-visibility.dto';
 import { AddMultipleLanguagesDto } from './dto/add-multiple-languages.dto';
@@ -72,29 +72,49 @@ export class Service {
     return userProjects;
   }
 
-  async createProjectKey(addKeyDto: AddKeyDto) {
-    const { id, userId, projectId } = addKeyDto;
+  async createProjectEntity(createEntityDto: CreateEntityDto) {
+    const { id, userId, projectId } = createEntityDto;
 
-    const { values, ...keyData } = addKeyDto;
+    const { values, ...keyData } = createEntityDto;
 
     const createdKey = new this.keyModel(keyData);
+
+    const keyCreateResult = await createdKey.save();
 
     const keyValuesData = values.map((value) => ({
       id: Math.random().toString(16).substring(2),
       userId,
       projectId,
       keyId: id,
+      pathCache: `${keyCreateResult.pathCache}/${keyCreateResult.id}`,
       ...value,
     }));
 
     const valuesInsertResult = await this.keyValueModel.insertMany(keyValuesData);
 
-    const keyCreateResult = await createdKey.save();
 
     return {
       valuesInsertResult,
       keyCreateResult,
     };
+  }
+
+  async deleteProjectEntity(id: string) {
+    const entity = await this.keyModel.findOne({ id });
+
+    const { pathCache } = entity;
+
+    const childrenEntitiesDeleteResult = await this.keyModel.deleteMany({
+      pathCache: new RegExp(`^${pathCache}/${id}`),
+    });
+
+    const childrenValuesDeleteResult = await this.keyValueModel.deleteMany({
+      pathCache: new RegExp(`^${pathCache}/${id}`),
+    });
+
+    const entityDeleteResult = await entity.deleteOne();
+
+    return 'Ok';
   }
 
   async getAggregatedValues(userId: string, projectId: string, parentIds: string[], keyIds?: string[]) {
@@ -103,7 +123,7 @@ export class Service {
         $match: {
           userId,
           projectId,
-          parentId: { $in: parentIds },
+          ...(parentIds ? { parentId: { $in: parentIds } } : {}),
           ...(keyIds ? { keyId: { $in: keyIds } } : {}),
         },
       },
@@ -165,6 +185,11 @@ export class Service {
         description,
       },
     );
+
+    let key = await this.keyModel.findOne({ id });
+
+    key = key.toObject();
+
     const bulkOps = values.map((item) => {
       const $setOnInsert = {};
 
@@ -174,6 +199,10 @@ export class Service {
 
       if (!item.id) {
         $setOnInsert['id'] = Math.random().toString(16).substring(2);
+      }
+
+      if (!item.pathCache) {
+        $setOnInsert['pathCache'] = `${key.pathCache}/${key.id}`;
       }
 
       return {
@@ -190,12 +219,10 @@ export class Service {
 
     await this.keyValueModel.bulkWrite(bulkOps);
 
-    const key = await this.keyModel.find({ id });
-
     const aggregatedValues = await this.getAggregatedValues(userId, projectId, [parentId]);
 
     return {
-      ...key[0].toObject(),
+      key,
       values: aggregatedValues.length > 0 && aggregatedValues[0][id] ? aggregatedValues[0][id] : [],
     };
   }
@@ -225,6 +252,22 @@ export class Service {
       keys,
       values: aggregatedValues[0],
     } as IProject;
+  }
+
+  async getKeyData(projectId: string, userId: string, keyId: string) {
+    const result = await this.keyModel.findOne({
+      projectId,
+      userId,
+      id: keyId,
+    });
+
+    const aggregatedValues = await this.getAggregatedValues(userId, projectId, null, [keyId]);
+
+
+    return {
+      key: result,
+      values: aggregatedValues[0],
+    };
   }
 
   async getComponentData(projectId: string, userId: string, componentId: string) {

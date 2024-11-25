@@ -1,4 +1,4 @@
-export class AddKeyDto {
+export class CreateEntityDto {
   userId: string;
   projectId: string;
   parentId: string;
@@ -13,4 +13,5 @@ export class AddKeyDto {
   ];
   description: string;
   type: string;
+  pathCache: string;
 }

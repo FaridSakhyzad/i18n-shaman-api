@@ -15,16 +15,14 @@ import { FilesInterceptor } from '@nestjs/platform-express';
 
 import { Service } from './service';
 import { ILanguage, IProject } from './interfaces/project.interface';
-import { IKey } from './interfaces/key.interface';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { AddLanguageDto } from './dto/add-language.dto';
-import { AddKeyDto } from './dto/add-key.dto';
+import { CreateEntityDto } from './dto/create-entity.dto';
 import { UpdateKeyDto } from './dto/update-key.dto';
 import { LanguageVisibilityDto } from './dto/language-visibility.dto';
 import { AddMultipleLanguagesDto } from './dto/add-multiple-languages.dto';
 import { MultipleLanguageVisibilityDto } from './dto/multiple-languages-visibility.dto';
 import { UpdateLanguageDto } from './dto/update-language.dto';
-import { get } from 'mongoose';
 
 @Controller()
 export class TransController {
@@ -73,6 +71,22 @@ export class TransController {
     return this.Service.getUserProjectById(projectId, session.userId);
   }
 
+  @Get('getKeyData')
+  getKeyData(
+    @Query('projectId') projectId: string,
+    @Query('userId') userId: string,
+    @Query('keyId') keyId: string,
+    @Req() req,
+  ) {
+    const { session, sessionID } = req;
+
+    if (!session || !sessionID || !session.userId) {
+      throw new UnauthorizedException('Error: Denied');
+    }
+
+    return this.Service.getKeyData(projectId, userId, keyId);
+  }
+
   @Get('getComponentData')
   getComponentData(
     @Query('projectId') projectId: string,
@@ -89,18 +103,32 @@ export class TransController {
     return this.Service.getComponentData(projectId, userId, componentId);
   }
 
-  @Post('createProjectKey')
-  createProjectKey(@Body() addKeyDto: AddKeyDto, @Req() req) {
+  @Post('createProjectEntity')
+  createProjectEntity(@Body() createKeyEntity: CreateEntityDto, @Req() req) {
     const { session, sessionID } = req;
 
     if (!session || !sessionID || !session.userId) {
       throw new UnauthorizedException('Error: Denied');
     }
 
-    return this.Service.createProjectKey({
+    return this.Service.createProjectEntity({
       userId: session.userId,
-      ...addKeyDto,
+      ...createKeyEntity,
     });
+  }
+
+  @Delete('deleteProjectEntity')
+  deleteProjectEntity(
+    @Query('id') id: string,
+    @Req() req,
+  ) {
+    const { session, sessionID } = req;
+
+    if (!session || !sessionID || !session.userId) {
+      throw new UnauthorizedException('Error: Denied');
+    }
+
+    return this.Service.deleteProjectEntity(id);
   }
 
   @Post('updateKey')

@@ -14,6 +14,7 @@ export class UpdateKeyDto {
       parentId: string;
       projectId: string;
       keyId: string;
+      pathCache?: string;
     },
   ];
 }

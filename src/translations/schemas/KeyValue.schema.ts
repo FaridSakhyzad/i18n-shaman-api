@@ -8,4 +8,5 @@ export const KeyValueSchema = new mongoose.Schema({
   keyId: String,
   languageId: String,
   value: String,
+  pathCache: String,
 });

@@ -10,4 +10,5 @@ export interface IKey extends Document {
   values: { [key: string]: IKeyValue };
   description: string;
   type: string;
+  pathCache: string;
 }

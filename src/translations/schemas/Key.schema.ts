@@ -10,4 +10,5 @@ export const KeySchema = new mongoose.Schema({
   values: [KeyValueSchema],
   description: String,
   type: String,
+  pathCache: String,
 });
