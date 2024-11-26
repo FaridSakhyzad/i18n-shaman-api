@@ -1,6 +1,6 @@
 export interface ISearchParams {
   projectId: string;
-  value: string;
+  searchQuery: string;
   exact: boolean;
   casing: boolean;
 }

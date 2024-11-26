@@ -1,6 +1,5 @@
 import { Controller, Get, Query, Req, UnauthorizedException } from '@nestjs/common';
 import { SearchService } from './search.service';
-import { IKey } from './interfaces/key.interface';
 
 @Controller()
 export class SearchController {
@@ -9,11 +8,11 @@ export class SearchController {
   @Get('search')
   getUserProjects(
     @Query('projectId') projectId: string,
-    @Query('value') value: string,
+    @Query('query') searchQuery: string,
     @Query('casing') casing: string,
     @Query('exact') exact: string,
     @Req() req,
-  ): Promise<IKey[]> {
+  ) {
     const { session, sessionID } = req;
 
     if (!session || !sessionID || !session.userId) {
@@ -22,7 +21,7 @@ export class SearchController {
 
     return this.SearchService.performSearch({
       projectId,
-      value,
+      searchQuery,
       casing: casing === 'true',
       exact: exact === 'true',
     });

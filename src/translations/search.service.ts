@@ -13,43 +13,88 @@ export class SearchService {
     private keyValueModel: Model<IKeyValue>,
   ) {}
 
-  async performSearch(params: ISearchParams): Promise<IKey[]> {
-    const { projectId, value, exact, casing } = params;
+  async performSearch(params: ISearchParams) {
+    const { projectId, searchQuery, exact, casing } = params;
 
-    console.log('projectId', projectId);
-    console.log('value', value);
-    console.log('exact', exact);
-    console.log('casing', casing);
+    const searchParams = { $regex: searchQuery, $options: 'i' };
 
-    const keys = await this.keyModel.find({
-      label: { $regex: value, $options: 'i' },
+    const keyMatchesByLabel = await this.keyModel.find({
+      label: searchParams,
       projectId,
     });
 
-    const values = await this.keyValueModel.find({
-      value: { $regex: value, $options: 'i' },
+    const valueMatchesByValue = await this.keyValueModel.find({
+      value: searchParams,
     });
 
     let keysIds = [];
 
-    for (let i = 0; i < keys.length; i++) {
-      keysIds.push(keys[i].id);
+    for (let i = 0; i < keyMatchesByLabel.length; i++) {
+      keysIds.push(keyMatchesByLabel[i].id);
     }
 
-    for (let i = 0; i < values.length; i++) {
-      keysIds.push(values[i].id);
+    for (let i = 0; i < valueMatchesByValue.length; i++) {
+      keysIds.push(valueMatchesByValue[i].keyId);
     }
 
     keysIds = [...new Set(keysIds)];
 
-    const allMatchedKeys = await this.keyModel.find({
-      id: { $in: keysIds },
-      projectId,
+    const allMatchedKeys = await this.keyModel
+      .find({
+        id: { $in: keysIds },
+        projectId,
+      })
+      .lean();
+
+    const paths = allMatchedKeys.map(({ pathCache }) => pathCache);
+
+    let allParentAndKeyIds = [];
+
+    paths.forEach((path) => {
+      const ids = path.replace('#/', '').split('/');
+
+      allParentAndKeyIds = [...allParentAndKeyIds, ...ids];
     });
 
-    console.log('keys', keys);
-    console.log('values', values);
+    allParentAndKeyIds = [...new Set([...allParentAndKeyIds, ...keysIds])];
 
-    return allMatchedKeys;
+    const allMatchesParents = await this.keyModel
+      .find({
+        id: { $in: allParentAndKeyIds },
+        projectId,
+      })
+      .lean();
+
+    const tree = this.buildHierarchy([...allMatchesParents], projectId);
+
+    return {
+      matchedKeys: allMatchedKeys,
+      parents: allMatchesParents,
+      tree,
+    };
+  }
+
+  buildHierarchy(data, rootId) {
+    const map = new Map();
+
+    data.forEach((item) => {
+      map.set(item.id, { ...item, children: [] });
+    });
+
+    const result = [];
+
+    data.forEach((item) => {
+      if (item.parentId === rootId) {
+        result.push(map.get(item.id));
+      } else {
+        const parent = map.get(item.parentId);
+
+        if (parent) {
+          parent.children.push(map.get(item.id));
+        }
+      }
+    });
+
+    return result;
   }
 }
