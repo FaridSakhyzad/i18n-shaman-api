@@ -3,6 +3,7 @@ import { Model } from 'mongoose';
 import { IKey } from './interfaces/key.interface';
 import { IKeyValue } from './interfaces/keyValue.interface';
 import { ISearchParams } from './interfaces/searchParams.interface';
+import { Service } from './service';
 
 @Injectable()
 export class SearchService {
@@ -11,10 +12,11 @@ export class SearchService {
     private keyModel: Model<IKey>,
     @Inject('KEY_VALUE_MODEL')
     private keyValueModel: Model<IKeyValue>,
+    private readonly Service: Service,
   ) {}
 
   async performSearch(params: ISearchParams) {
-    const { projectId, searchQuery, exact, casing } = params;
+    const { userId, projectId, searchQuery, exact, casing } = params;
 
     const searchParams = { $regex: searchQuery, $options: 'i' };
 
@@ -67,10 +69,16 @@ export class SearchService {
 
     const tree = this.buildHierarchy([...allMatchesParents], projectId);
 
+    const [values] = await this.Service.getAggregatedValues(
+      userId,
+      projectId,
+      allMatchedKeys.map(({ parentId }) => parentId),
+      keysIds,
+    );
+
     return {
-      matchedKeys: allMatchedKeys,
-      parents: allMatchesParents,
-      tree,
+      keys: tree,
+      values,
     };
   }
 

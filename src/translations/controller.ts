@@ -23,6 +23,7 @@ import { LanguageVisibilityDto } from './dto/language-visibility.dto';
 import { AddMultipleLanguagesDto } from './dto/add-multiple-languages.dto';
 import { MultipleLanguageVisibilityDto } from './dto/multiple-languages-visibility.dto';
 import { UpdateLanguageDto } from './dto/update-language.dto';
+import { IKey } from './interfaces/key.interface';
 
 @Controller()
 export class TransController {
@@ -219,5 +220,20 @@ export class TransController {
   @Get('getAppLanguagesData')
   async getAppLanguagesData(): Promise<ILanguage[]> {
     return this.Service.getAppLanguagesData();
+  }
+
+  @Get('getMultipleEntitiesDataByParentId')
+  async getMultipleEntitiesDataByParentId(
+    @Query('projectId') projectId: string,
+    @Query('parentId') parentId: string,
+    @Req() req,
+  ): Promise<IKey[]> {
+    const { session, sessionID } = req;
+
+    if (!session || !sessionID || !session.userId) {
+      throw new UnauthorizedException('Error: Denied');
+    }
+
+    return this.Service.getMultipleEntitiesDataByParentId(projectId, parentId);
   }
 }

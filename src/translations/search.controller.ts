@@ -20,6 +20,7 @@ export class SearchController {
     }
 
     return this.SearchService.performSearch({
+      userId: session.userId,
       projectId,
       searchQuery,
       casing: casing === 'true',

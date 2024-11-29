@@ -263,7 +263,6 @@ export class Service {
 
     const aggregatedValues = await this.getAggregatedValues(userId, projectId, null, [keyId]);
 
-
     return {
       key: result,
       values: aggregatedValues[0],
@@ -452,6 +451,12 @@ export class Service {
         result[destinationFolder][destinationFile][keyLabel] = value;
       }
     }
+
+    return result;
+  }
+
+  async getMultipleEntitiesDataByParentId(projectId: string, parentId: string): Promise<IKey[]> {
+    const result = await this.keyModel.find({ projectId, parentId });
 
     return result;
   }
