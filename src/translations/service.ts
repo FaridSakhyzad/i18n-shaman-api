@@ -16,6 +16,7 @@ import { MultipleLanguageVisibilityDto } from './dto/multiple-languages-visibili
 import { UpdateLanguageDto } from './dto/update-language.dto';
 import { IRawLanguage } from './interfaces/rawLanguage.interface';
 import { IKeyValue } from './interfaces/keyValue.interface';
+import { KeyHelperService } from './keyHelper.service';
 
 @Injectable()
 export class Service {
@@ -28,6 +29,7 @@ export class Service {
     private keyValueModel: Model<IKeyValue>,
     @Inject('RAW_LANGUAGE_MODEL')
     private rawLanguageModel: Model<IRawLanguage>,
+    private readonly KeyHelperService: KeyHelperService,
   ) {}
 
   async getUserProjects(params): Promise<IProject[]> {
@@ -242,8 +244,8 @@ export class Service {
     const keys: IKey[] = await this.keyModel.find({
       userId,
       projectId,
-      parentId: projectId, //Project level keys only
-    });
+      parentId: projectId,
+    }).sort({ type: 'asc', label: 'asc' });
 
     const aggregatedValues = await this.getAggregatedValues(userId, projectId, [projectId]);
 
@@ -469,7 +471,7 @@ export class Service {
       })
       .exec();
 
-    const { languages } = project;
+    const { languages} = project;
 
     const languagesMap: ILanguageMap = {};
 
@@ -484,30 +486,36 @@ export class Service {
       };
     }
 
-    const keys = (await this.keyModel.find({ userId, projectId, type: 'string' })) as [IKey];
-    const [aggregatedProjectValues] = (await this.getAggregatedValues(userId, projectId, [projectId])) || [];
+    const keys = (await this.keyModel.find({ userId, projectId }).lean()) as [IKey];
+    const [getAggregatedValues] = (await this.getAggregatedValues(userId, projectId, null, null)) || [];
 
-    const localeFilesStructure = this.getShallowFileKeyValueStructure(keys, aggregatedProjectValues, languagesMap);
+    const preparedKeys = keys.map(({ id, parentId, label, type, pathCache}) => ({
+      id,
+      parentId,
+      label,
+      type,
+      pathCache
+    }));
 
-    const components = (await this.keyModel.find({ userId, projectId, type: 'component' })) as [IKey];
+    const filesStructure = {} as { [locale: string]: {} };
 
-    const componentIdsArray = components.map(({ id }) => id);
+    for (let i = 0; i < languages.length; i += 1) {
+      const { id, code, customCode, customCodeEnabled } = languages[i];
 
-    const componentsInnerKeys = (await this.keyModel.find({
-      userId,
-      projectId,
-      type: 'string',
-      parentId: { $in: componentIdsArray },
-    })) as [IKey];
+      const tree = this.KeyHelperService.buildHierarchyForExport(keys, getAggregatedValues, projectId, id);
 
-    const [aggregatedComponentsValues] = (await this.getAggregatedValues(userId, projectId, componentIdsArray)) || [];
+      const languageLabel = customCodeEnabled ? customCode : code;
 
-    const localeFoldersComponentStructure = this.getFolderLanguageKeyValueStructure(
-      components,
-      componentsInnerKeys,
-      aggregatedComponentsValues,
-      languagesMap,
-    );
+      filesStructure[languageLabel] = tree;
+    }
+
+    console.log('filesStructure', filesStructure);
+
+    const componentStructure = {} as {
+      [languageCodeFolderName: string]: {
+        componentName: string;
+      }
+    }
 
     res.setHeader('Content-Type', 'application/zip');
     res.setHeader('Content-Disposition', 'attachment; filename=files.zip');
@@ -522,15 +530,15 @@ export class Service {
 
     archive.pipe(res);
 
-    for (const [fileName, data] of Object.entries(localeFilesStructure)) {
-      const jsonContent = JSON.stringify(data, null, 2);
-      archive.append(jsonContent, { name: `${fileName}.json` });
-    }
+    for (const [containerName, data] of Object.entries(filesStructure)) {
+      const jsonContent = JSON.stringify(data[0], null, 2);
+      archive.append(jsonContent, { name: `${containerName}.json` });
 
-    for (const [folderName, filesData] of Object.entries(localeFoldersComponentStructure)) {
-      for (const [fileName, file] of Object.entries(filesData)) {
-        const jsonContent = JSON.stringify(file, null, 2);
-        archive.append(jsonContent, { name: `${folderName}/${fileName}.json` });
+      const componentsData = data[1];
+
+      for (const [componentName, componentData] of Object.entries(componentsData)) {
+        const jsonContent = JSON.stringify(componentData, null, 2);
+        archive.append(jsonContent, { name: `${containerName}/${componentName}.json` });
       }
     }
 

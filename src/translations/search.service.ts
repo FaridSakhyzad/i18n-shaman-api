@@ -4,6 +4,7 @@ import { IKey } from './interfaces/key.interface';
 import { IKeyValue } from './interfaces/keyValue.interface';
 import { ISearchParams } from './interfaces/searchParams.interface';
 import { Service } from './service';
+import { KeyHelperService } from './keyHelper.service';
 
 @Injectable()
 export class SearchService {
@@ -13,6 +14,7 @@ export class SearchService {
     @Inject('KEY_VALUE_MODEL')
     private keyValueModel: Model<IKeyValue>,
     private readonly Service: Service,
+    private readonly KeyHelperService: KeyHelperService,
   ) {}
 
   async performSearch(params: ISearchParams) {
@@ -67,7 +69,7 @@ export class SearchService {
       })
       .lean();
 
-    const tree = this.buildHierarchy([...allMatchesParents], projectId);
+    const tree = this.KeyHelperService.buildHierarchy([...allMatchesParents], projectId);
 
     const [values] = await this.Service.getAggregatedValues(
       userId,
@@ -80,29 +82,5 @@ export class SearchService {
       keys: tree,
       values,
     };
-  }
-
-  buildHierarchy(data, rootId) {
-    const map = new Map();
-
-    data.forEach((item) => {
-      map.set(item.id, { ...item, children: [] });
-    });
-
-    const result = [];
-
-    data.forEach((item) => {
-      if (item.parentId === rootId) {
-        result.push(map.get(item.id));
-      } else {
-        const parent = map.get(item.parentId);
-
-        if (parent) {
-          parent.children.push(map.get(item.id));
-        }
-      }
-    });
-
-    return result;
   }
 }
