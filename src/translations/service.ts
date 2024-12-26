@@ -94,7 +94,6 @@ export class Service {
 
     const valuesInsertResult = await this.keyValueModel.insertMany(keyValuesData);
 
-
     return {
       valuesInsertResult,
       keyCreateResult,
@@ -241,11 +240,13 @@ export class Service {
       throw new NotFoundException('Project not found');
     }
 
-    const keys: IKey[] = await this.keyModel.find({
-      userId,
-      projectId,
-      parentId: projectId,
-    }).sort({ type: 'asc', label: 'asc' });
+    const keys: IKey[] = await this.keyModel
+      .find({
+        userId,
+        projectId,
+        parentId: projectId,
+      })
+      .sort({ type: 'asc', label: 'asc' });
 
     const aggregatedValues = await this.getAggregatedValues(userId, projectId, [projectId]);
 
@@ -471,7 +472,7 @@ export class Service {
       })
       .exec();
 
-    const { languages} = project;
+    const { languages } = project;
 
     const languagesMap: ILanguageMap = {};
 
@@ -494,7 +495,7 @@ export class Service {
       parentId,
       label,
       type,
-      pathCache
+      pathCache,
     }));
 
     const filesStructure = {} as { [locale: string]: {} };
@@ -507,14 +508,6 @@ export class Service {
       const languageLabel = customCodeEnabled ? customCode : code;
 
       filesStructure[languageLabel] = tree;
-    }
-
-    console.log('filesStructure', filesStructure);
-
-    const componentStructure = {} as {
-      [languageCodeFolderName: string]: {
-        componentName: string;
-      }
     }
 
     res.setHeader('Content-Type', 'application/zip');
@@ -555,7 +548,334 @@ export class Service {
     return result.map(({ id, code, label }) => ({ id, code, label }));
   }
 
+  collectDocuments(
+    data: any,
+    parentId: string | null = null,
+    results: any[] = [],
+    pathCache = '#',
+    namePathCache = '#',
+  ): any[] {
+    for (const [label, value] of Object.entries(data)) {
+      const document = {
+        label,
+        value: typeof value === 'string' ? value : null,
+        type: typeof value === 'string' ? 'string' : 'folder',
+        parentId,
+        id: undefined,
+        pathCache,
+        namePathCache,
+      };
+
+      const tempId = Math.random().toString(16).substring(2);
+      document.id = tempId;
+      results.push(document);
+
+      if (typeof value === 'object' && value !== null) {
+        this.collectDocuments(value, tempId, results, `${pathCache}/${tempId}`, `${namePathCache}/${label}`);
+      }
+    }
+
+    return results;
+  }
+
   async importDataToProject(data: any) {
+    const { projectId, userId, files, metaData } = data;
+
+    const filesMetaData = JSON.parse(metaData);
+
+    const filesMetaDataMap = {};
+
+    filesMetaData.forEach((dataItem) => {
+      filesMetaDataMap[dataItem.name] = dataItem;
+    });
+
+    const langCodes = [];
+
+    for (let i = 0; i < filesMetaData.length; i += 1) {
+      const { name, code } = filesMetaData[i];
+
+      filesMetaDataMap[name] = filesMetaData[i];
+
+      langCodes.push(code);
+    }
+
+    const languages = await this.rawLanguageModel.find({ code: langCodes });
+
+    const languagesMap = {};
+
+    for (let i = 0; i < languages.length; i += 1) {
+      languagesMap[languages[i].code] = languages[i];
+    }
+
+    const documentsToCreate = {};
+
+    for (let j = 0; j < files.length; j += 1) {
+      const { originalname, buffer } = files[j];
+      const fileContent = buffer.toString('utf-8');
+
+      const fileContentData = JSON.parse(fileContent);
+
+      const { code: languageCode } = filesMetaDataMap[originalname];
+
+      const documentsData = this.collectDocuments(fileContentData, projectId);
+
+      documentsData.forEach((document) => {
+        const { id, label, type, parentId, value, pathCache, namePathCache } = document;
+
+        const namePathCacheWithLabel = `${namePathCache}/${label}`;
+
+        if (!documentsToCreate[namePathCacheWithLabel]) {
+          documentsToCreate[namePathCacheWithLabel] = {
+            id,
+            userId,
+            parentId,
+            projectId,
+            label,
+            type,
+            pathCache,
+          };
+
+          if (type === 'string') {
+            documentsToCreate[namePathCacheWithLabel].values = [
+              {
+                code: languageCode,
+                value,
+              },
+            ];
+          }
+        } else {
+          if (type === 'string') {
+            documentsToCreate[namePathCacheWithLabel].values.push({
+              code: languageCode,
+              value,
+            });
+          }
+        }
+      });
+    }
+
+    const valuesToCreate = [];
+
+    const arrayOfDocumentsToCreate = Object.values(documentsToCreate);
+
+    arrayOfDocumentsToCreate.forEach((document: any) => {
+      const { id, type, parentId, values, pathCache } = document;
+
+      if (type === 'string') {
+        values.forEach(({ code, value }) => {
+          valuesToCreate.push({
+            id: Math.random().toString(16).substring(2),
+            languageId: languagesMap[code].id,
+            keyId: id,
+            parentId,
+            value,
+            userId,
+            projectId,
+            pathCache,
+          });
+        });
+      }
+    });
+
+    const project = await this.projectModel
+      .findOne({
+        userId,
+        projectId,
+      })
+      .exec();
+
+    const { languages: projectLanguages } = project;
+
+    const projectLanguagesIdsMap = {};
+
+    for (let k = 0; k < projectLanguages.length; k += 1) {
+      const { id } = projectLanguages[k] as IProjectLanguage;
+      projectLanguagesIdsMap[id] = true;
+    }
+
+    const languagesToAdd = languages
+      .map(({ id, label, code }) => ({
+        projectId,
+        id,
+        label,
+        baseLanguage: false,
+        code,
+        visible: true,
+      }))
+      .filter(({ id }) => {
+        return !projectLanguagesIdsMap[id];
+      });
+
+    let addProjectLanguagesResult = {};
+
+    if (languagesToAdd.length > 0) {
+      addProjectLanguagesResult = await this.addMultipleProjectLanguages({
+        projectId,
+        languages: languagesToAdd,
+      });
+    }
+
+    const createDocumentsResult = await this.keyModel.insertMany(arrayOfDocumentsToCreate);
+
+    const createValuesResult = await this.keyValueModel.insertMany(valuesToCreate);
+
+    return {
+      addProjectLanguagesResult,
+      createDocumentsResult,
+      createValuesResult,
+    };
+  }
+
+  async importComponentsDataToProject(data: any) {
+    const { projectId, userId, files, metaData } = data;
+
+    const project = await this.projectModel
+      .findOne({
+        userId,
+        projectId,
+      })
+      .exec();
+
+    const { languages: projectLanguages } = project;
+
+    const projectLanguagesLanguagesSet = new Set(projectLanguages.map(({ id }: ILanguage) => id));
+    const languageIdsToAdd = new Set();
+
+    const componentsToCreate = new Set();
+
+    metaData.forEach((dataItem) => {
+      const { name, languageId } = dataItem;
+
+      if (!projectLanguagesLanguagesSet.has(languageId)) {
+        languageIdsToAdd.add(languageId);
+      }
+
+      componentsToCreate.add(name);
+    });
+
+    const languagesToAdd = await this.rawLanguageModel.find({ id: [...languageIdsToAdd] });
+
+    let addProjectLanguagesResult = null;
+
+    const documentsToCreate = {};
+
+    for (let i = 0; i < files.length; i += 1) {
+      const { buffer } = files[i];
+      const fileMetaData = metaData[i];
+
+      const fileContent = buffer.toString('utf-8');
+      const fileContentData = JSON.parse(fileContent);
+
+      const { name: fileName, code: languageCode, languageId } = fileMetaData;
+
+      const componentToCreateId = Math.random().toString(16).substring(2);
+
+      const componentToCreateData = {
+        label: fileName,
+        parentId: projectId,
+        projectId,
+        type: 'component',
+        userId,
+        id: componentToCreateId,
+        pathCache: '#',
+      };
+
+      const documentsData = this.collectDocuments(
+        fileContentData,
+        componentToCreateId,
+        [],
+        `#/${componentToCreateId}`,
+        `#/${fileName}`,
+      );
+
+      documentsData.push(componentToCreateData);
+
+      documentsData.forEach((document) => {
+        const { id, label, type, parentId, value, pathCache, namePathCache } = document;
+
+        const namePathCacheWithLabel = `${namePathCache}/${label}`;
+
+        if (!documentsToCreate[namePathCacheWithLabel]) {
+          documentsToCreate[namePathCacheWithLabel] = {
+            id,
+            userId,
+            parentId,
+            projectId,
+            label,
+            type,
+            pathCache,
+          };
+
+          if (type === 'string') {
+            documentsToCreate[namePathCacheWithLabel].values = [
+              {
+                code: languageCode,
+                languageId,
+                value,
+              },
+            ];
+          }
+        } else {
+          if (type === 'string') {
+            documentsToCreate[namePathCacheWithLabel].values.push({
+              code: languageCode,
+              languageId,
+              value,
+            });
+          }
+        }
+      });
+    }
+
+    const valuesToCreate = [];
+
+    const arrayOfDocumentsToCreate = Object.values(documentsToCreate);
+
+    arrayOfDocumentsToCreate.forEach((document: any) => {
+      const { id, type, parentId, values, pathCache } = document;
+
+      if (type === 'string') {
+        values.forEach(({ languageId, value }) => {
+          valuesToCreate.push({
+            id: Math.random().toString(16).substring(2),
+            languageId,
+            keyId: id,
+            parentId,
+            value,
+            userId,
+            projectId,
+            pathCache,
+          });
+        });
+      }
+    });
+
+    if (languagesToAdd.length > 0) {
+      addProjectLanguagesResult = await this.addMultipleProjectLanguages({
+        projectId,
+        languages: languagesToAdd.map(({ id, label, code }) => ({
+          projectId,
+          id,
+          label,
+          baseLanguage: false,
+          code,
+          visible: true,
+        })),
+      });
+    }
+
+    const createDocumentsResult = await this.keyModel.insertMany(arrayOfDocumentsToCreate);
+
+    const createValuesResult = await this.keyValueModel.insertMany(valuesToCreate);
+
+    return {
+      addProjectLanguagesResult,
+      createDocumentsResult,
+      createValuesResult,
+    };
+  }
+
+  async importDataToProjectOld(data: any) {
     const { projectId, userId, files } = data;
 
     const project: IProject = await this.projectModel

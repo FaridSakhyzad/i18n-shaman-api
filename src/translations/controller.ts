@@ -194,6 +194,7 @@ export class TransController {
   @UseInterceptors(FilesInterceptor('files', 10))
   async importJsonDataToProject(
     @Body('projectId') projectId: string,
+    @Body('metaData') metaData: string,
     @Req() req,
     @UploadedFiles() files: Express.Multer.File[],
   ) {
@@ -203,7 +204,31 @@ export class TransController {
       throw new UnauthorizedException('Error: Denied');
     }
 
-    return await this.Service.importDataToProject({ projectId, userId: session.userId, files });
+    return await this.Service.importDataToProject({ projectId, userId: session.userId, files, metaData });
+  }
+
+  @Post('importComponentsDataToProject')
+  @UseInterceptors(FilesInterceptor('files', 10))
+  async importComponentsDataToProject(
+    @Body('projectId') projectId: string,
+    @Body('metaData') metaData: string[],
+    @Req() req,
+    @UploadedFiles() files: Express.Multer.File[] & { code: string },
+  ) {
+    const { session, sessionID } = req;
+
+    if (!session || !sessionID || !session.userId) {
+      throw new UnauthorizedException('Error: Denied');
+    }
+
+    const metaDataParsed = metaData.map((dataItem) => JSON.parse(dataItem));
+
+    return await this.Service.importComponentsDataToProject({
+      projectId,
+      userId: session.userId,
+      files,
+      metaData: metaDataParsed,
+    });
   }
 
   @Post('addMultipleRawLanguages')
