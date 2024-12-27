@@ -9,7 +9,7 @@ export class SearchController {
   getUserProjects(
     @Query('projectId') projectId: string,
     @Query('query') searchQuery: string,
-    @Query('casing') casing: string,
+    @Query('caseSensitive') caseSensitive: string,
     @Query('exact') exact: string,
     @Req() req,
   ) {
@@ -23,7 +23,7 @@ export class SearchController {
       userId: session.userId,
       projectId,
       searchQuery,
-      casing: casing === 'true',
+      caseSensitive: caseSensitive === 'true',
       exact: exact === 'true',
     });
   }

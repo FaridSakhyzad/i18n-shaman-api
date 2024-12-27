@@ -18,9 +18,20 @@ export class SearchService {
   ) {}
 
   async performSearch(params: ISearchParams) {
-    const { userId, projectId, searchQuery, exact, casing } = params;
+    const { userId, projectId, searchQuery, exact, caseSensitive } = params;
 
-    const searchParams = { $regex: searchQuery, $options: 'i' };
+    let searchParams: { $regex: string, $options?: string } | string = { $regex: searchQuery };
+
+    if (!caseSensitive) {
+      searchParams.$options = 'i';
+    }
+
+    if (exact) {
+      searchParams.$regex = `^${searchQuery}$`;
+      searchParams.$options = caseSensitive ? null : 'i';
+    }
+
+    console.log('searchParams', searchParams);
 
     const keyMatchesByLabel = await this.keyModel.find({
       label: searchParams,
