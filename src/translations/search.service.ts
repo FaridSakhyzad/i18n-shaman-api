@@ -18,7 +18,19 @@ export class SearchService {
   ) {}
 
   async performSearch(params: ISearchParams) {
-    const { userId, projectId, searchQuery, exact, caseSensitive } = params;
+    const {
+      userId,
+      projectId,
+      searchQuery,
+      exact,
+      caseSensitive,
+      inKeys,
+      inValues,
+      inFolders,
+      inComponents,
+    } = params;
+
+    console.log('params', params);
 
     let searchParams: { $regex: string, $options?: string } | string = { $regex: searchQuery };
 
@@ -31,16 +43,33 @@ export class SearchService {
       searchParams.$options = caseSensitive ? null : 'i';
     }
 
-    console.log('searchParams', searchParams);
+    const typesToSearch = [];
+
+    if (inKeys) {
+      typesToSearch.push('string');
+    }
+
+    if (inFolders) {
+      typesToSearch.push('folder');
+    }
+
+    if (inComponents) {
+      typesToSearch.push('component');
+    }
 
     const keyMatchesByLabel = await this.keyModel.find({
       label: searchParams,
       projectId,
+      type: typesToSearch
     });
 
-    const valueMatchesByValue = await this.keyValueModel.find({
-      value: searchParams,
-    });
+    let valueMatchesByValue = []
+
+    if (inValues) {
+      valueMatchesByValue = await this.keyValueModel.find({
+        value: searchParams,
+      });
+    }
 
     let keysIds = [];
 
@@ -48,8 +77,10 @@ export class SearchService {
       keysIds.push(keyMatchesByLabel[i].id);
     }
 
-    for (let i = 0; i < valueMatchesByValue.length; i++) {
-      keysIds.push(valueMatchesByValue[i].keyId);
+    if (inValues) {
+      for (let i = 0; i < valueMatchesByValue.length; i++) {
+        keysIds.push(valueMatchesByValue[i].keyId);
+      }
     }
 
     keysIds = [...new Set(keysIds)];

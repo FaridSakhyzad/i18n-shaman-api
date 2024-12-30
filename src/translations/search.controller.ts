@@ -9,8 +9,12 @@ export class SearchController {
   getUserProjects(
     @Query('projectId') projectId: string,
     @Query('query') searchQuery: string,
-    @Query('caseSensitive') caseSensitive: string,
+    @Query('case_sensitive') caseSensitive: string,
     @Query('exact') exact: string,
+    @Query('in_keys') inKeys: string,
+    @Query('in_values') inValues: string,
+    @Query('in_folders') inFolders: string,
+    @Query('in_components') inComponents: string,
     @Req() req,
   ) {
     const { session, sessionID } = req;
@@ -25,6 +29,10 @@ export class SearchController {
       searchQuery,
       caseSensitive: caseSensitive === 'true',
       exact: exact === 'true',
+      inKeys: inKeys !== 'false',
+      inValues: inValues !== 'false',
+      inFolders: inFolders !== 'false',
+      inComponents: inComponents !== 'false',
     });
   }
 }

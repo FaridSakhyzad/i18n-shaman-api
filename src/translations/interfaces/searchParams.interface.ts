@@ -4,4 +4,8 @@ export interface ISearchParams {
   searchQuery: string;
   exact: boolean;
   caseSensitive: boolean;
+  inKeys: boolean;
+  inValues: boolean;
+  inFolders: boolean;
+  inComponents: boolean;
 }
