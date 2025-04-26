@@ -62,14 +62,19 @@ export class TransController {
   }
 
   @Get('getUserProjectById')
-  getUserProjectById(@Query('projectId') projectId: string, @Req() req): Promise<IProject> {
+  getUserProjectById(
+    @Query('projectId') projectId: string,
+    @Query('page') page: number,
+    @Query('itemsPerPage') itemsPerPage: number,
+    @Req() req,
+  ): Promise<IProject> {
     const { session, sessionID } = req;
 
     if (!session || !sessionID || !session.userId) {
       throw new UnauthorizedException('Error: Denied');
     }
 
-    return this.Service.getUserProjectById(projectId, session.userId);
+    return this.Service.getUserProjectById(projectId, page, itemsPerPage, session.userId);
   }
 
   @Get('getKeyData')
@@ -88,8 +93,8 @@ export class TransController {
     return this.Service.getKeyData(projectId, userId, keyId);
   }
 
-  @Get('getComponentData')
-  getComponentData(
+  @Get('getEntityContent')
+  getEntityContent(
     @Query('projectId') projectId: string,
     @Query('userId') userId: string,
     @Query('componentId') componentId: string,
@@ -101,7 +106,7 @@ export class TransController {
       throw new UnauthorizedException('Error: Denied');
     }
 
-    return this.Service.getComponentData(projectId, userId, componentId);
+    return this.Service.getEntityContent(projectId, userId, componentId);
   }
 
   @Post('createProjectEntity')
@@ -119,10 +124,7 @@ export class TransController {
   }
 
   @Delete('deleteProjectEntity')
-  deleteProjectEntity(
-    @Query('id') id: string,
-    @Req() req,
-  ) {
+  deleteProjectEntity(@Query('id') id: string, @Req() req) {
     const { session, sessionID } = req;
 
     if (!session || !sessionID || !session.userId) {

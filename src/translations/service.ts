@@ -103,6 +103,10 @@ export class Service {
   async deleteProjectEntity(id: string) {
     const entity = await this.keyModel.findOne({ id });
 
+    if (!entity) {
+      throw new NotFoundException('Entity not found');
+    }
+
     const { pathCache } = entity;
 
     const childrenEntitiesDeleteResult = await this.keyModel.deleteMany({
@@ -115,7 +119,7 @@ export class Service {
 
     const entityDeleteResult = await entity.deleteOne();
 
-    return 'Ok';
+    return entityDeleteResult;
   }
 
   async getAggregatedValues(userId: string, projectId: string, parentIds: string[], keyIds?: string[]) {
@@ -228,7 +232,7 @@ export class Service {
     };
   }
 
-  async getUserProjectById(projectId: string, userId: string): Promise<IProject> {
+  async getUserProjectById(projectId: string, page: number, itemsPerPage: number, userId: string): Promise<IProject> {
     const project = await this.projectModel
       .findOne({
         projectId,
@@ -240,12 +244,25 @@ export class Service {
       throw new NotFoundException('Project not found');
     }
 
+    const keysTotalCount = await this.keyModel.countDocuments({
+      userId,
+      projectId,
+      parentId: projectId,
+    });
+
     const keys: IKey[] = await this.keyModel
-      .find({
-        userId,
-        projectId,
-        parentId: projectId,
-      })
+      .find(
+        {
+          userId,
+          projectId,
+          parentId: projectId,
+        },
+        null,
+        {
+          limit: itemsPerPage,
+          skip: page * itemsPerPage,
+        },
+      )
       .sort({ type: 'asc', label: 'asc' });
 
     const aggregatedValues = await this.getAggregatedValues(userId, projectId, [projectId]);
@@ -254,6 +271,7 @@ export class Service {
       ...project.toObject(),
       keys,
       values: aggregatedValues[0],
+      keysTotalCount,
     } as IProject;
   }
 
@@ -272,12 +290,14 @@ export class Service {
     };
   }
 
-  async getComponentData(projectId: string, userId: string, componentId: string) {
-    const keys = await this.keyModel.find({
-      projectId,
-      userId,
-      parentId: componentId,
-    });
+  async getEntityContent(projectId: string, userId: string, componentId: string) {
+    const keys = await this.keyModel
+      .find({
+        projectId,
+        userId,
+        parentId: componentId,
+      })
+      .sort({ type: 'asc', label: 'asc' });
 
     const aggregatedValues = await this.getAggregatedValues(userId, projectId, [componentId]);
 

@@ -8,6 +8,7 @@ export interface IProject extends Document {
   keys: IKey[];
   values?: any;
   languages: [];
+  keysTotalCount?: number;
 }
 
 export interface ILanguage {
