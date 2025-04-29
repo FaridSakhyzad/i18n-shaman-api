@@ -9,6 +9,8 @@ export interface IProject extends Document {
   values?: any;
   languages: [];
   keysTotalCount?: number;
+  upstreamParents?: any;
+  subfolder?: IKey;
 }
 
 export interface ILanguage {

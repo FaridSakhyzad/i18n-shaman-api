@@ -64,6 +64,7 @@ export class TransController {
   @Get('getUserProjectById')
   getUserProjectById(
     @Query('projectId') projectId: string,
+    @Query('subFolderId') subFolderId: string,
     @Query('page') page: number,
     @Query('itemsPerPage') itemsPerPage: number,
     @Req() req,
@@ -74,7 +75,7 @@ export class TransController {
       throw new UnauthorizedException('Error: Denied');
     }
 
-    return this.Service.getUserProjectById(projectId, page, itemsPerPage, session.userId);
+    return this.Service.getUserProjectById(projectId, page, itemsPerPage, session.userId, subFolderId);
   }
 
   @Get('getKeyData')

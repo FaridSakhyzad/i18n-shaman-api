@@ -232,7 +232,13 @@ export class Service {
     };
   }
 
-  async getUserProjectById(projectId: string, page: number, itemsPerPage: number, userId: string): Promise<IProject> {
+  async getUserProjectById(
+    projectId: string,
+    page: number,
+    itemsPerPage: number,
+    userId: string,
+    subFolderId?: string,
+  ): Promise<IProject> {
     const project = await this.projectModel
       .findOne({
         projectId,
@@ -244,10 +250,39 @@ export class Service {
       throw new NotFoundException('Project not found');
     }
 
+    let upstreamParents: IKey[];
+    let subfolderModel: IKey;
+
+    if (subFolderId) {
+      subfolderModel = await this.keyModel.findOne({ userId, projectId, id: subFolderId });
+
+      console.log('subfolderModel', subfolderModel);
+
+      const parentIds = subfolderModel.pathCache.replace('#', projectId).split('/');
+
+      console.log('parentIds', parentIds);
+
+      upstreamParents = await this.keyModel.find(
+        { userId, projectId, id: parentIds },
+        {
+          id: 1,
+          label: 1,
+          projectId: 1,
+          parentId: 1,
+          pathCache: 1,
+          type: 1,
+          values: 1,
+          _id: 0,
+        },
+      );
+    }
+
+    const parentId = subFolderId || projectId;
+
     const keysTotalCount = await this.keyModel.countDocuments({
       userId,
       projectId,
-      parentId: projectId,
+      parentId,
     });
 
     const keys: IKey[] = await this.keyModel
@@ -255,7 +290,7 @@ export class Service {
         {
           userId,
           projectId,
-          parentId: projectId,
+          parentId,
         },
         null,
         {
@@ -265,13 +300,15 @@ export class Service {
       )
       .sort({ type: 'asc', label: 'asc' });
 
-    const aggregatedValues = await this.getAggregatedValues(userId, projectId, [projectId]);
+    const aggregatedValues = await this.getAggregatedValues(userId, projectId, [parentId]);
 
     return {
       ...project.toObject(),
       keys,
       values: aggregatedValues[0],
       keysTotalCount,
+      upstreamParents,
+      subfolder: subfolderModel,
     } as IProject;
   }
 
