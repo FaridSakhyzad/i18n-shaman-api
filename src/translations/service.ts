@@ -4,6 +4,9 @@ import { Model } from 'mongoose';
 import { Injectable, Inject, NotFoundException } from '@nestjs/common';
 
 import { ILanguage, ILanguageMap, IProject, IProjectLanguage } from './interfaces/project.interface';
+
+import { EStatusCode, IResponse } from '../interfaces';
+
 import { IKey } from './interfaces/key.interface';
 
 import { CreateProjectDto } from './dto/create-project.dto';
@@ -29,7 +32,7 @@ export class Service {
     private keyValueModel: Model<IKeyValue>,
     @Inject('RAW_LANGUAGE_MODEL')
     private rawLanguageModel: Model<IRawLanguage>,
-    private readonly KeyHelperService: KeyHelperService,
+    private readonly keyHelperService: KeyHelperService,
   ) {}
 
   async getUserProjects(params): Promise<IProject[]> {
@@ -256,11 +259,7 @@ export class Service {
     if (subFolderId) {
       subfolderModel = await this.keyModel.findOne({ userId, projectId, id: subFolderId });
 
-      console.log('subfolderModel', subfolderModel);
-
       const parentIds = subfolderModel.pathCache.replace('#', projectId).split('/');
-
-      console.log('parentIds', parentIds);
 
       upstreamParents = await this.keyModel.find(
         { userId, projectId, id: parentIds },
@@ -521,15 +520,8 @@ export class Service {
     return result;
   }
 
-  async exportProjectToJson(projectId: string, userId: string, res) {
-    const project = await this.projectModel
-      .findOne({
-        userId,
-        projectId,
-      })
-      .exec();
-
-    const { languages } = project;
+  async getStructuredObjectFromProject(userId: string, project: IProject): Promise<any> {
+    const { languages, projectId } = project;
 
     const languagesMap: ILanguageMap = {};
 
@@ -544,28 +536,33 @@ export class Service {
       };
     }
 
-    const keys = (await this.keyModel.find({ userId, projectId }).lean()) as [IKey];
-    const [getAggregatedValues] = (await this.getAggregatedValues(userId, projectId, null, null)) || [];
+    const keys: IKey[] = await this.keyModel.find({ userId, projectId }).lean();
+    const [aggregatedValues] = (await this.getAggregatedValues(userId, projectId, null, null)) || [];
 
-    const preparedKeys = keys.map(({ id, parentId, label, type, pathCache}) => ({
-      id,
-      parentId,
-      label,
-      type,
-      pathCache,
-    }));
-
-    const filesStructure = {} as { [locale: string]: {} };
+    const filesStructure = {} as { [locale: string]: object };
 
     for (let i = 0; i < languages.length; i += 1) {
       const { id, code, customCode, customCodeEnabled } = languages[i];
 
-      const tree = this.KeyHelperService.buildHierarchyForExport(keys, getAggregatedValues, projectId, id);
+      const tree = this.keyHelperService.buildHierarchyForExport(keys, aggregatedValues, projectId, id);
 
       const languageLabel = customCodeEnabled ? customCode : code;
 
       filesStructure[languageLabel] = tree;
     }
+
+    return filesStructure;
+  }
+
+  async exportProjectToJson(projectId: string, format_settings: any, userId: string, res): Promise<any> {
+    const project = await this.projectModel
+      .findOne({
+        userId,
+        projectId,
+      })
+      .exec();
+
+    const filesStructure = this.getStructuredObjectFromProject(userId, project);
 
     res.setHeader('Content-Type', 'application/zip');
     res.setHeader('Content-Disposition', 'attachment; filename=files.zip');
@@ -592,7 +589,38 @@ export class Service {
       }
     }
 
-    await archive.finalize();
+    return await archive.finalize();
+  }
+
+  async exportProjectToAndroidXml(projectId: string, formatSettings: any, userId: string, res): Promise<IResponse> {
+    const response: IResponse = {
+      statusCode: EStatusCode.OK,
+    };
+
+    const project = await this.projectModel
+      .findOne({
+        userId,
+        projectId,
+      })
+      .exec();
+
+    const filesStructure = await this.getStructuredObjectFromProject(userId, project);
+
+    //for (const [containerName, data] of Object.entries(filesStructure)) {}
+
+    return response;
+  }
+
+  async exportProjectToAppleStrings(projectId: string, formatSettings: any, userId: string, res): Promise<IResponse> {
+    const response: IResponse = {
+      statusCode: EStatusCode.OK,
+    };
+
+    console.log('exportProjectToAppleStrings');
+    console.log('exportProjectToAppleStrings');
+    console.log('exportProjectToAppleStrings');
+
+    return Promise.resolve(response);
   }
 
   async addMultipleRawLanguages(data: any) {
@@ -783,7 +811,7 @@ export class Service {
     };
   }
 
-  async importComponentsDataToProject(data: any) {
+  async importComponentsDataToProject(data: any): Promise<IResponse> {
     const { projectId, userId, files, metaData } = data;
 
     const project = await this.projectModel
@@ -926,99 +954,12 @@ export class Service {
     const createValuesResult = await this.keyValueModel.insertMany(valuesToCreate);
 
     return {
-      addProjectLanguagesResult,
-      createDocumentsResult,
-      createValuesResult,
+      statusCode: EStatusCode.OK,
+      metaData: {
+        addProjectLanguagesResult,
+        createDocumentsResult,
+        createValuesResult,
+      },
     };
-  }
-
-  async importDataToProjectOld(data: any) {
-    const { projectId, userId, files } = data;
-
-    const project: IProject = await this.projectModel
-      .findOne({
-        projectId,
-      })
-      .exec();
-
-    const { languages: projectLanguages } = project;
-
-    const appLanguages = await this.getAppLanguagesData();
-
-    const localesToCreate = [];
-    const localesToUpdate = [];
-    const keysToAdd = {};
-
-    for (let i = 0; i < files.length; i++) {
-      const { originalname, buffer } = files[i];
-
-      const lastDotIndex = originalname.lastIndexOf('.');
-
-      const filename = originalname.slice(0, lastDotIndex);
-
-      const newLanguageFromFilename = appLanguages.find((language: ILanguage) => language.code === filename);
-
-      if (newLanguageFromFilename) {
-        localesToCreate.push({
-          baseLanguage: false,
-          visible: true,
-          customCodeEnabled: false,
-          customLabelEnabled: false,
-          customCode: '',
-          customLabel: '',
-          ...newLanguageFromFilename,
-        });
-      }
-
-      const projectLanguageFromFilename = projectLanguages.find(
-        (language: IProjectLanguage) => language.code === filename,
-      );
-
-      if (projectLanguageFromFilename) {
-        localesToUpdate.push(projectLanguageFromFilename);
-      }
-
-      const languageFromFilename = newLanguageFromFilename || projectLanguageFromFilename;
-
-      const fileContent = buffer.toString('utf-8');
-
-      let data = null;
-
-      try {
-        data = JSON.parse(fileContent);
-      } catch (e) {
-        console.error('ERROR DECODING JSON FILE', e);
-      }
-
-      Object.entries(data).forEach(([key, value]) => {
-        if (keysToAdd[key] === undefined) {
-          keysToAdd[key] = {
-            userId,
-            projectId,
-            id: Math.random().toString(16).substring(2),
-            label: key,
-            values: [],
-            description: '',
-          };
-        }
-
-        keysToAdd[key].values.push({
-          languageId: languageFromFilename.id,
-          value,
-        });
-      });
-    }
-
-    const projectUpdateResult = await this.projectModel
-      .findOneAndUpdate({ projectId }, { $push: { languages: { $each: localesToCreate } } }, { new: true })
-      .exec();
-
-    const keysToAddArray = [];
-
-    Object.entries(keysToAdd).forEach(([key, value]) => {
-      keysToAddArray.push(value);
-    });
-
-    return await this.keyModel.insertMany(keysToAddArray);
   }
 }

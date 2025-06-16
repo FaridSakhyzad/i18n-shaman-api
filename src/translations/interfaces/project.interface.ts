@@ -38,3 +38,10 @@ export interface ILanguageMapItem {
 export interface ILanguageMap {
   [key: string]: ILanguageMapItem;
 }
+
+export enum EExportFormats {
+  json = 'json',
+  androidXml = 'android_xml',
+  appleStrings = 'apple_string',
+  phpArray = 'php_array',
+}

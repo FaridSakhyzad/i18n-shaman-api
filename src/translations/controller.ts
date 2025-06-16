@@ -14,7 +14,7 @@ import {
 import { FilesInterceptor } from '@nestjs/platform-express';
 
 import { Service } from './service';
-import { ILanguage, IProject } from './interfaces/project.interface';
+import { EExportFormats, ILanguage, IProject } from './interfaces/project.interface';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { AddLanguageDto } from './dto/add-language.dto';
 import { CreateEntityDto } from './dto/create-entity.dto';
@@ -24,6 +24,7 @@ import { AddMultipleLanguagesDto } from './dto/add-multiple-languages.dto';
 import { MultipleLanguageVisibilityDto } from './dto/multiple-languages-visibility.dto';
 import { UpdateLanguageDto } from './dto/update-language.dto';
 import { IKey } from './interfaces/key.interface';
+import { EStatusCode, IResponse } from '../interfaces';
 
 @Controller()
 export class TransController {
@@ -182,15 +183,36 @@ export class TransController {
     return this.Service.setMultipleLanguagesVisibility(multipleLanguageVisibilityDto);
   }
 
-  @Get('exportProjectToJson')
-  async exportProjectToJson(@Query('projectId') projectId: string, @Req() req, @Res() res: Response): Promise<void> {
+  @Get('exportProject')
+  async exportProject(
+    @Query('projectId') projectId: string,
+    @Query('format') format: EExportFormats,
+    @Query('format_settings') formatSettings: any = {},
+    @Req() req,
+    @Res() res: Response
+  ): Promise<IResponse> {
     const { session, sessionID } = req;
 
     if (!session || !sessionID || !session.userId) {
       throw new UnauthorizedException('Error: Denied');
     }
 
-    await this.Service.exportProjectToJson(projectId, session.userId, res);
+    if (format === EExportFormats.json) {
+      return await this.Service.exportProjectToJson(projectId, formatSettings, session.userId, res);
+    }
+
+    if (format === EExportFormats.androidXml) {
+      return await this.Service.exportProjectToAndroidXml(projectId, formatSettings, session.userId, res);
+    }
+
+    if (format === EExportFormats.appleStrings) {
+      return await this.Service.exportProjectToAppleStrings(projectId, formatSettings, session.userId, res);
+    }
+
+    return {
+      statusCode: EStatusCode.Not_Found,
+      message: 'Format is not supported',
+    };
   }
 
   @Post('importJsonDataToProject')
@@ -214,7 +236,7 @@ export class TransController {
   @UseInterceptors(FilesInterceptor('files', 10))
   async importComponentsDataToProject(
     @Body('projectId') projectId: string,
-    @Body('metaData') metaData: string[],
+    @Body('metaData') metaData: string[] | string,
     @Req() req,
     @UploadedFiles() files: Express.Multer.File[] & { code: string },
   ) {
@@ -224,7 +246,10 @@ export class TransController {
       throw new UnauthorizedException('Error: Denied');
     }
 
-    const metaDataParsed = metaData.map((dataItem) => JSON.parse(dataItem));
+    const metaDataParsed =
+      typeof metaData === 'string'
+        ? [JSON.parse(metaData as string)]
+        : metaData.map((dataItem) => JSON.parse(dataItem));
 
     return await this.Service.importComponentsDataToProject({
       projectId,

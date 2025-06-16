@@ -1,5 +1,13 @@
 import { Injectable } from '@nestjs/common';
 
+interface IKeyFolderStructure {
+  [key: string]: any;
+}
+
+interface IComponentStructure {
+  [key: string]: any;
+}
+
 @Injectable()
 export class KeyHelperService {
   constructor() {}
@@ -28,17 +36,19 @@ export class KeyHelperService {
     return result;
   }
 
-  buildHierarchyForExport(keysDataArray, valuesDataTree, rootId, languageId) {
+  buildHierarchyForExport(
+    keysDataArray,
+    valuesDataTree,
+    rootId,
+    languageId,
+  ): [IKeyFolderStructure, IComponentStructure] {
     const map = new Map();
 
     keysDataArray.forEach((item) => {
       map.set(item.id, { ...item, children: {} });
     });
 
-    const result = [
-      {},
-      {}
-    ];
+    const result: [IKeyFolderStructure, IComponentStructure] = [{}, {}];
 
     keysDataArray.forEach((item) => {
       if (item.parentId === rootId) {
