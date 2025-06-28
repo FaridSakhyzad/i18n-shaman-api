@@ -30,9 +30,7 @@ export class SearchService {
       inComponents,
     } = params;
 
-    console.log('params', params);
-
-    let searchParams: { $regex: string, $options?: string } | string = { $regex: searchQuery };
+    const searchParams: { $regex: string; $options?: string } | string = { $regex: searchQuery };
 
     if (!caseSensitive) {
       searchParams.$options = 'i';

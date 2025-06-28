@@ -10,6 +10,7 @@ interface IComponentStructure {
 
 @Injectable()
 export class KeyHelperService {
+  // eslint-disable-next-line @typescript-eslint/no-empty-function
   constructor() {}
 
   buildHierarchy(data, rootId) {
@@ -36,19 +37,28 @@ export class KeyHelperService {
     return result;
   }
 
-  buildHierarchyForExport(
+  buildHierarchyForJsonExport(
     keysDataArray,
     valuesDataTree,
     rootId,
     languageId,
-  ): [IKeyFolderStructure, IComponentStructure] {
+  ): {
+    localesData: IKeyFolderStructure;
+    componentsData: IComponentStructure;
+  } {
     const map = new Map();
 
     keysDataArray.forEach((item) => {
       map.set(item.id, { ...item, children: {} });
     });
 
-    const result: [IKeyFolderStructure, IComponentStructure] = [{}, {}];
+    const result: {
+      localesData: IKeyFolderStructure;
+      componentsData: IComponentStructure;
+    } = {
+      localesData: {},
+      componentsData: {},
+    };
 
     keysDataArray.forEach((item) => {
       if (item.parentId === rootId) {
@@ -57,15 +67,15 @@ export class KeyHelperService {
         if (item.type === 'string') {
           const { value = '' } = valuesDataTree[key.id] && valuesDataTree[key.id][languageId] ? valuesDataTree[key.id][languageId] : {};
 
-          result[0][key.label] = value;
+          result.localesData[key.label] = value;
         }
 
         if (item.type === 'folder') {
-          result[0][key.label] = key.children;
+          result.localesData[key.label] = key.children;
         }
 
         if (item.type === 'component') {
-          result[1][key.label] = key.children;
+          result.componentsData[key.label] = key.children;
         }
       } else {
         const parent = map.get(item.parentId);
@@ -83,6 +93,156 @@ export class KeyHelperService {
             parent.children[key.label] = key.children;
           }
         }
+      }
+    });
+
+    return result;
+  }
+
+  buildHierarchyForXmlExport(
+    keysDataArray,
+    valuesDataTree,
+    rootId,
+    languageId,
+  ): {
+    localesData: IKeyFolderStructure;
+    componentsData: IComponentStructure;
+  } {
+    const keysDataMap = new Map();
+
+    keysDataArray.forEach((item) => {
+      keysDataMap.set(item.id, { ...item, children: {} });
+    });
+
+    const result: {
+      localesData: IKeyFolderStructure;
+      componentsData: IComponentStructure;
+    } = {
+      localesData: {},
+      componentsData: {},
+    };
+
+    keysDataArray.forEach((item) => {
+      if (item.parentId === rootId) {
+        const key = keysDataMap.get(item.id);
+
+        const xmlReadyLabel = key.label.toLowerCase().replaceAll(' ', '-');
+
+        if (item.type === 'string') {
+          const { value = '' } = valuesDataTree[key.id] && valuesDataTree[key.id][languageId] ? valuesDataTree[key.id][languageId] : {};
+
+          result.localesData[xmlReadyLabel] = {
+            _text: value,
+          };
+        }
+
+        if (item.type === 'folder') {
+          result.localesData[xmlReadyLabel] = key.children;
+        }
+
+        if (item.type === 'component') {
+          result.componentsData[xmlReadyLabel] = key.children;
+        }
+      } else {
+        const parent = keysDataMap.get(item.parentId);
+
+        if (parent) {
+          const key = keysDataMap.get(item.id);
+
+          const xmlReadyLabel = key.label.toLowerCase().replaceAll(' ', '-');
+
+          if (item.type === 'string') {
+            const { value = '' } = valuesDataTree[key.id] && valuesDataTree[key.id][languageId] ? valuesDataTree[key.id][languageId] : {};
+
+            parent.children[xmlReadyLabel] = {
+              _text: value,
+            };
+          }
+
+          if (item.type === 'folder') {
+            parent.children[xmlReadyLabel] = key.children;
+          }
+        }
+      }
+    });
+
+    return result;
+  }
+
+  buildLinearKeyValueArray(
+    keysDataArray,
+    valuesDataTree,
+    rootId,
+    languageId,
+  ): {
+    localesData: IKeyFolderStructure;
+    componentsData: IComponentStructure;
+  } {
+    const keysDataMap = new Map();
+
+    keysDataArray.forEach((item) => {
+      keysDataMap.set(item.id, { ...item, children: {} });
+    });
+
+    const result: {
+      localesData: { [key: string]: string }[];
+      componentsData: { [key: string]: object[] };
+    } = {
+      localesData: [],
+      componentsData: {},
+    };
+
+    keysDataArray.forEach((keysDataItem) => {
+      const { id: keyId, label, pathCache, type } = keysDataItem;
+
+      if (type !== 'string') {
+        return;
+      }
+
+      const { value = '' } = valuesDataTree[keyId] && valuesDataTree[keyId][languageId] ? valuesDataTree[keyId][languageId] : {};
+
+      const pathCacheArray = pathCache.split('/');
+
+      let keyIsComponentsChild = false;
+
+      const firstParentData = keysDataMap.get(pathCacheArray[1]);
+
+      if (pathCacheArray.length >= 2) {
+        keyIsComponentsChild = firstParentData.type === 'component';
+      }
+
+      const labelArray = [];
+
+      pathCacheArray.forEach((pathCacheItem) => {
+        if (!keysDataMap.has(pathCacheItem)) {
+          return;
+        }
+
+        const { label, type } = keysDataMap.get(pathCacheItem);
+
+        if (type === 'component') {
+          return;
+        }
+
+        labelArray.push(label);
+      });
+
+      labelArray.push(label);
+
+      if (keyIsComponentsChild) {
+        if (!result.componentsData[firstParentData.label]) {
+          result.componentsData[firstParentData.label] = [];
+        }
+
+        result.componentsData[firstParentData.label].push({
+          key: labelArray.join('.'),
+          value,
+        });
+      } else {
+        result.localesData.push({
+          key: labelArray.join('.'),
+          value,
+        });
       }
     });
 

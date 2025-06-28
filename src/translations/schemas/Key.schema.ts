@@ -1,5 +1,4 @@
 import * as mongoose from 'mongoose';
-import { KeyValueSchema } from './KeyValue.schema';
 
 export const KeySchema = new mongoose.Schema({
   id: String,
@@ -7,8 +6,9 @@ export const KeySchema = new mongoose.Schema({
   projectId: String,
   parentId: String,
   label: String,
-  values: [KeyValueSchema],
   description: String,
   type: String,
   pathCache: String,
+  createdAt: Number,
+  updatedAt: Number,
 });

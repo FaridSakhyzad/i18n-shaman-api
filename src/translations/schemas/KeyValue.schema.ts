@@ -9,4 +9,5 @@ export const KeyValueSchema = new mongoose.Schema({
   languageId: String,
   value: String,
   pathCache: String,
+  createdAt: Number,
 });

@@ -7,4 +7,5 @@ export interface IKeyValue extends Document {
   keyId: string;
   languageId: string;
   value: string;
+  createdAt: Date;
 }

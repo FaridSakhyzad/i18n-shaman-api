@@ -1,9 +1,16 @@
 import * as archiver from 'archiver';
 
-import { Model } from 'mongoose';
+import { Model, SortOrder } from 'mongoose';
 import { Injectable, Inject, NotFoundException } from '@nestjs/common';
+import { js2xml } from 'xml-js';
 
-import { ILanguage, ILanguageMap, IProject, IProjectLanguage } from './interfaces/project.interface';
+import {
+  IStructuredProjectData,
+  ILanguage,
+  ILanguageMap,
+  IProject,
+  IProjectLanguage, EFilter,
+} from './interfaces/project.interface';
 
 import { EStatusCode, IResponse } from '../interfaces';
 
@@ -20,6 +27,7 @@ import { UpdateLanguageDto } from './dto/update-language.dto';
 import { IRawLanguage } from './interfaces/rawLanguage.interface';
 import { IKeyValue } from './interfaces/keyValue.interface';
 import { KeyHelperService } from './keyHelper.service';
+import { GetProjectByIdDto } from './dto/get-project-by-id.dto';
 
 @Injectable()
 export class Service {
@@ -80,9 +88,15 @@ export class Service {
   async createProjectEntity(createEntityDto: CreateEntityDto) {
     const { id, userId, projectId } = createEntityDto;
 
+    const createdAt = +new Date();
+
     const { values, ...keyData } = createEntityDto;
 
-    const createdKey = new this.keyModel(keyData);
+    const createdKey = new this.keyModel({
+      ...keyData,
+      updatedAt: createdAt,
+      createdAt,
+    });
 
     const keyCreateResult = await createdKey.save();
 
@@ -181,8 +195,10 @@ export class Service {
     return aggregatedValues;
   }
 
-  async updateProjectKey(updateKeyDto: UpdateKeyDto) {
+  async updateProjectEntity(updateKeyDto: UpdateKeyDto) {
     const { id, label, description, values, userId, projectId, parentId } = updateKeyDto;
+
+    const updatedAt = +new Date();
 
     const result = await this.keyModel.updateOne(
       {
@@ -191,6 +207,7 @@ export class Service {
       {
         label,
         description,
+        updatedAt,
       },
     );
 
@@ -235,13 +252,9 @@ export class Service {
     };
   }
 
-  async getUserProjectById(
-    projectId: string,
-    page: number,
-    itemsPerPage: number,
-    userId: string,
-    subFolderId?: string,
-  ): Promise<IProject> {
+  async getUserProjectById(params: GetProjectByIdDto): Promise<IProject> {
+    const { projectId, page, itemsPerPage, userId, subFolderId, sortBy, sortDirection = 'asc', filters } = params;
+
     const project = await this.projectModel
       .findOne({
         projectId,
@@ -284,12 +297,61 @@ export class Service {
       parentId,
     });
 
+    const sortParams: { [key: string]: SortOrder | { $meta: any } } = {
+      type: 'asc',
+    };
+
+    if (!sortBy || sortBy === 'name') {
+      sortParams.label = sortDirection;
+    }
+
+    if (sortBy === 'type') {
+      sortParams.type = sortDirection;
+    }
+
+    if (sortBy === 'created') {
+      sortParams.createdAt = sortDirection;
+    }
+
+    if (sortBy === 'updated') {
+      sortParams.updatedAt = sortDirection;
+    }
+
+    const filterData = {};
+
+    if (filters && filters.length > 0) {
+      filters.forEach((item: string) => {
+        filterData[item] = true;
+      });
+    }
+
+    const filterParams: any = {};
+
+    if (filterData[EFilter.hideComponents] || filterData[EFilter.hideFolders] || filterData[EFilter.hideKeys]) {
+      filterParams.type = new Set(['string', 'folder', 'component']);
+
+      if (filterData[EFilter.hideComponents]) {
+        filterParams.type.delete('component');
+      }
+
+      if (filterData[EFilter.hideFolders]) {
+        filterParams.type.delete('folder');
+      }
+
+      if (filterData[EFilter.hideKeys]) {
+        filterParams.type.delete('string');
+      }
+
+      filterParams.type = [...filterParams.type];
+    }
+
     const keys: IKey[] = await this.keyModel
       .find(
         {
           userId,
           projectId,
           parentId,
+          ...filterParams,
         },
         null,
         {
@@ -297,7 +359,7 @@ export class Service {
           skip: page * itemsPerPage,
         },
       )
-      .sort({ type: 'asc', label: 'asc' });
+      .sort(sortParams);
 
     const aggregatedValues = await this.getAggregatedValues(userId, projectId, [parentId]);
 
@@ -539,19 +601,19 @@ export class Service {
     const keys: IKey[] = await this.keyModel.find({ userId, projectId }).lean();
     const [aggregatedValues] = (await this.getAggregatedValues(userId, projectId, null, null)) || [];
 
-    const filesStructure = {} as { [locale: string]: object };
+    const structuredProjectData: IStructuredProjectData = {};
 
     for (let i = 0; i < languages.length; i += 1) {
       const { id, code, customCode, customCodeEnabled } = languages[i];
 
-      const tree = this.keyHelperService.buildHierarchyForExport(keys, aggregatedValues, projectId, id);
+      const tree = this.keyHelperService.buildHierarchyForJsonExport(keys, aggregatedValues, projectId, id);
 
       const languageLabel = customCodeEnabled ? customCode : code;
 
-      filesStructure[languageLabel] = tree;
+      structuredProjectData[languageLabel] = tree;
     }
 
-    return filesStructure;
+    return structuredProjectData;
   }
 
   async exportProjectToJson(projectId: string, format_settings: any, userId: string, res): Promise<any> {
@@ -562,7 +624,7 @@ export class Service {
       })
       .exec();
 
-    const filesStructure = this.getStructuredObjectFromProject(userId, project);
+    const structuredData = await this.getStructuredObjectFromProject(userId, project);
 
     res.setHeader('Content-Type', 'application/zip');
     res.setHeader('Content-Disposition', 'attachment; filename=files.zip');
@@ -577,11 +639,12 @@ export class Service {
 
     archive.pipe(res);
 
-    for (const [containerName, data] of Object.entries(filesStructure)) {
-      const jsonContent = JSON.stringify(data[0], null, 2);
-      archive.append(jsonContent, { name: `${containerName}.json` });
+    for (const [langCode, data] of Object.entries(structuredData)) {
+      const containerName = langCode;
+      const { localesData, componentsData } = data as IStructuredProjectData;
 
-      const componentsData = data[1];
+      const jsonContent = JSON.stringify(localesData, null, 2);
+      archive.append(jsonContent, { name: `${containerName}.json` });
 
       for (const [componentName, componentData] of Object.entries(componentsData)) {
         const jsonContent = JSON.stringify(componentData, null, 2);
@@ -590,6 +653,75 @@ export class Service {
     }
 
     return await archive.finalize();
+  }
+
+  async getXmlReadyObjectFromProject(userId: string, project: IProject): Promise<any> {
+    const { languages, projectId } = project;
+
+    const languagesMap: ILanguageMap = {};
+
+    for (let i = 0; i < languages.length; i++) {
+      const { id, code, customCode, customCodeEnabled } = languages[i];
+
+      languagesMap[id] = {
+        id,
+        code,
+        customCode,
+        customCodeEnabled,
+      };
+    }
+
+    const keys: IKey[] = await this.keyModel.find({ userId, projectId }).lean();
+    const [aggregatedValues] = (await this.getAggregatedValues(userId, projectId, null, null)) || [];
+
+    const structuredProjectData: IStructuredProjectData = {};
+
+    for (let i = 0; i < languages.length; i += 1) {
+      const { id, code, customCode, customCodeEnabled } = languages[i];
+
+      const tree = this.keyHelperService.buildHierarchyForXmlExport(keys, aggregatedValues, projectId, id);
+
+      const languageLabel = customCodeEnabled ? customCode : code;
+
+      structuredProjectData[languageLabel] = tree;
+    }
+
+    return structuredProjectData;
+  }
+
+  async getStringsReadyArrayFromProject(userId: string, project: IProject): Promise<any> {
+    const { languages, projectId } = project;
+
+    const languagesMap: ILanguageMap = {};
+
+    for (let i = 0; i < languages.length; i++) {
+      const { id, code, customCode, customCodeEnabled } = languages[i];
+
+      languagesMap[id] = {
+        id,
+        code,
+        customCode,
+        customCodeEnabled,
+      };
+    }
+
+    const keys: IKey[] = await this.keyModel.find({ userId, projectId }).lean();
+
+    const [aggregatedValues] = (await this.getAggregatedValues(userId, projectId, null, null)) || [];
+
+    const structuredProjectData: IStructuredProjectData = {};
+
+    for (let i = 0; i < languages.length; i += 1) {
+      const { id, code, customCode, customCodeEnabled } = languages[i];
+
+      const array = this.keyHelperService.buildLinearKeyValueArray(keys, aggregatedValues, projectId, id);
+
+      const languageLabel = customCodeEnabled ? customCode : code;
+
+      structuredProjectData[languageLabel] = array;
+    }
+
+    return structuredProjectData;
   }
 
   async exportProjectToAndroidXml(projectId: string, formatSettings: any, userId: string, res): Promise<IResponse> {
@@ -604,11 +736,54 @@ export class Service {
       })
       .exec();
 
-    const filesStructure = await this.getStructuredObjectFromProject(userId, project);
+    const structuredData = await this.getXmlReadyObjectFromProject(userId, project);
 
-    //for (const [containerName, data] of Object.entries(filesStructure)) {}
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', 'attachment; filename=files.zip');
 
-    return response;
+    const archive = archiver('zip', {
+      zlib: { level: 9 },
+    });
+
+    archive.on('error', (err) => {
+      throw err;
+    });
+
+    archive.pipe(res);
+
+    const declaration = {
+      _declaration: {
+        _attributes: {
+          version: '1.0',
+          encoding: 'utf-8',
+        },
+      },
+    };
+
+    for (const [langCode, data] of Object.entries(structuredData)) {
+      const containerName = langCode;
+      const { localesData, componentsData } = data as IStructuredProjectData;
+
+      const xmlLocalesData = {
+        ...declaration,
+        [langCode]: localesData,
+      };
+
+      const xmlLocalesString = js2xml(xmlLocalesData, { compact: true, ignoreComment: true, spaces: 2 });
+      archive.append(xmlLocalesString, { name: `${containerName}.xml` });
+
+      for (const [componentName, componentData] of Object.entries(componentsData)) {
+        const xmlComponentData = {
+          ...declaration,
+          [langCode]: componentData,
+        };
+
+        const xmlComponentsString = js2xml(xmlComponentData, { compact: true, ignoreComment: true, spaces: 2 });
+        archive.append(xmlComponentsString, { name: `${containerName}/${componentName}.xml` });
+      }
+    }
+
+    return await archive.finalize();
   }
 
   async exportProjectToAppleStrings(projectId: string, formatSettings: any, userId: string, res): Promise<IResponse> {
@@ -616,11 +791,51 @@ export class Service {
       statusCode: EStatusCode.OK,
     };
 
-    console.log('exportProjectToAppleStrings');
-    console.log('exportProjectToAppleStrings');
-    console.log('exportProjectToAppleStrings');
+    const project = await this.projectModel
+      .findOne({
+        userId,
+        projectId,
+      })
+      .exec();
 
-    return Promise.resolve(response);
+    const structuredData = await this.getStringsReadyArrayFromProject(userId, project);
+
+    console.log('structuredData', JSON.stringify(structuredData, null, 2));
+
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', 'attachment; filename=files.zip');
+
+    const archive = archiver('zip', {
+      zlib: { level: 9 },
+    });
+
+    archive.on('error', (err) => {
+      throw err;
+    });
+
+    archive.pipe(res);
+
+    for (const [langCode, data] of Object.entries(structuredData)) {
+      const containerName = langCode;
+      const { localesData, componentsData } = data as {
+        localesData: { key: string; value: string }[];
+        componentsData: {
+          [key: string]: { key: string; value: string }[];
+        };
+      };
+
+      const result = localesData.map(({ key, value }: any) => `"${key}" = "${value}";`);
+
+      archive.append(result.join('\n'), { name: `${containerName}.txt` });
+
+      for (const [componentName, componentData] of Object.entries(componentsData)) {
+        const txtComponentsString = componentData.map(({ key, value }: any) => `${key} = ${value}`).join('\n');
+
+        archive.append(txtComponentsString, { name: `${containerName}/${componentName}.strings` });
+      }
+    }
+
+    return await archive.finalize();
   }
 
   async addMultipleRawLanguages(data: any) {

@@ -45,3 +45,19 @@ export enum EExportFormats {
   appleStrings = 'apple_string',
   phpArray = 'php_array',
 }
+
+export interface IStructuredProjectData {
+  [locale: string]: object;
+}
+
+export interface IStructuredProjectLinearLocaleData {
+  [locale: string]: object[];
+}
+
+export enum EFilter {
+  hideEmpty = 'hideEmpty',
+  hideNonEmpty = 'hideNonEmpty',
+  hideFolders = 'hideFolders',
+  hideComponents = 'hideComponents',
+  hideKeys = 'hideKeys',
+}

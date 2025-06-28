@@ -11,4 +11,5 @@ export interface IKey extends Document {
   description: string;
   type: string;
   pathCache: string;
+  createdAt: Date;
 }

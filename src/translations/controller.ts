@@ -25,6 +25,7 @@ import { MultipleLanguageVisibilityDto } from './dto/multiple-languages-visibili
 import { UpdateLanguageDto } from './dto/update-language.dto';
 import { IKey } from './interfaces/key.interface';
 import { EStatusCode, IResponse } from '../interfaces';
+import { GetProjectByIdDto, TSortBy, TSortDirection } from './dto/get-project-by-id.dto';
 
 @Controller()
 export class TransController {
@@ -68,6 +69,9 @@ export class TransController {
     @Query('subFolderId') subFolderId: string,
     @Query('page') page: number,
     @Query('itemsPerPage') itemsPerPage: number,
+    @Query('sortBy') sortBy: TSortBy,
+    @Query('sortDirection') sortDirection: TSortDirection,
+    @Query('filters') filters: string,
     @Req() req,
   ): Promise<IProject> {
     const { session, sessionID } = req;
@@ -76,7 +80,16 @@ export class TransController {
       throw new UnauthorizedException('Error: Denied');
     }
 
-    return this.Service.getUserProjectById(projectId, page, itemsPerPage, session.userId, subFolderId);
+    return this.Service.getUserProjectById({
+      projectId,
+      page,
+      itemsPerPage,
+      userId: session.userId,
+      subFolderId,
+      sortBy,
+      sortDirection,
+      filters: filters ? filters.split(',') : [],
+    } as GetProjectByIdDto);
   }
 
   @Get('getKeyData')
@@ -138,7 +151,7 @@ export class TransController {
 
   @Post('updateKey')
   updateKey(@Body() updateKeyDto: UpdateKeyDto) {
-    return this.Service.updateProjectKey(updateKeyDto);
+    return this.Service.updateProjectEntity(updateKeyDto);
   }
 
   @Post('addLanguage')
@@ -189,7 +202,7 @@ export class TransController {
     @Query('format') format: EExportFormats,
     @Query('format_settings') formatSettings: any = {},
     @Req() req,
-    @Res() res: Response
+    @Res() res: Response,
   ): Promise<IResponse> {
     const { session, sessionID } = req;
 
