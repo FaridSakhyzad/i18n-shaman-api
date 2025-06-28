@@ -248,4 +248,98 @@ export class KeyHelperService {
 
     return result;
   }
+
+  buildLinearArrayForXml(
+    keysDataArray,
+    valuesDataTree,
+    rootId,
+    languageId,
+  ): {
+    localesData: IKeyFolderStructure;
+    componentsData: IComponentStructure;
+  } {
+    const keysDataMap = new Map();
+
+    keysDataArray.forEach((item) => {
+      keysDataMap.set(item.id, { ...item, children: {} });
+    });
+
+    const result: {
+      localesData: {}[];
+      componentsData: { [key: string]: object[] };
+    } = {
+      localesData: [],
+      componentsData: {},
+    };
+
+    keysDataArray.forEach((keysDataItem) => {
+      const { id: keyId, label, pathCache, type } = keysDataItem;
+
+      if (type !== 'string') {
+        return;
+      }
+
+      const { value = '' } = valuesDataTree[keyId] && valuesDataTree[keyId][languageId] ? valuesDataTree[keyId][languageId] : {};
+
+      const pathCacheArray = pathCache.split('/');
+
+      let keyIsComponentsChild = false;
+
+      const firstParentData = keysDataMap.get(pathCacheArray[1]);
+
+      if (pathCacheArray.length >= 2) {
+        keyIsComponentsChild = firstParentData.type === 'component';
+      }
+
+      const labelArray = [];
+
+      pathCacheArray.forEach((pathCacheItem) => {
+        if (!keysDataMap.has(pathCacheItem)) {
+          return;
+        }
+
+        const { label, type } = keysDataMap.get(pathCacheItem);
+
+        if (type === 'component') {
+          return;
+        }
+
+        labelArray.push(label);
+      });
+
+      labelArray.push(label);
+
+      if (keyIsComponentsChild) {
+        if (!result.componentsData[firstParentData.label]) {
+          result.componentsData[firstParentData.label] = [];
+        }
+
+        result.componentsData[firstParentData.label].push({
+          type: 'element',
+          name: 'string',
+          attributes: {
+            name: labelArray.join('.'),
+          },
+          elements: [{
+            type: 'text',
+            text: value,
+          }],
+        });
+      } else {
+        result.localesData.push({
+          type: 'element',
+          name: 'string',
+          attributes: {
+            name: labelArray.join('.'),
+          },
+          elements: [{
+            type: 'text',
+            text: value,
+          }],
+        });
+      }
+    });
+
+    return result;
+  }
 }

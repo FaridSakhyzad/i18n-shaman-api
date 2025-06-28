@@ -655,7 +655,7 @@ export class Service {
     return await archive.finalize();
   }
 
-  async getXmlReadyObjectFromProject(userId: string, project: IProject): Promise<any> {
+  async getXmlReadyLinearDataFromProject(userId: string, project: IProject): Promise<any> {
     const { languages, projectId } = project;
 
     const languagesMap: ILanguageMap = {};
@@ -679,11 +679,11 @@ export class Service {
     for (let i = 0; i < languages.length; i += 1) {
       const { id, code, customCode, customCodeEnabled } = languages[i];
 
-      const tree = this.keyHelperService.buildHierarchyForXmlExport(keys, aggregatedValues, projectId, id);
+      const array = this.keyHelperService.buildLinearArrayForXml(keys, aggregatedValues, projectId, id);
 
       const languageLabel = customCodeEnabled ? customCode : code;
 
-      structuredProjectData[languageLabel] = tree;
+      structuredProjectData[languageLabel] = array;
     }
 
     return structuredProjectData;
@@ -736,7 +736,7 @@ export class Service {
       })
       .exec();
 
-    const structuredData = await this.getXmlReadyObjectFromProject(userId, project);
+    const linearData = await this.getXmlReadyLinearDataFromProject(userId, project);
 
     res.setHeader('Content-Type', 'application/zip');
     res.setHeader('Content-Disposition', 'attachment; filename=files.zip');
@@ -752,33 +752,33 @@ export class Service {
     archive.pipe(res);
 
     const declaration = {
-      _declaration: {
-        _attributes: {
+      declaration: {
+        attributes: {
           version: '1.0',
           encoding: 'utf-8',
         },
       },
     };
 
-    for (const [langCode, data] of Object.entries(structuredData)) {
+    for (const [langCode, data] of Object.entries(linearData)) {
       const containerName = langCode;
       const { localesData, componentsData } = data as IStructuredProjectData;
 
       const xmlLocalesData = {
         ...declaration,
-        [langCode]: localesData,
+        elements: localesData,
       };
 
-      const xmlLocalesString = js2xml(xmlLocalesData, { compact: true, ignoreComment: true, spaces: 2 });
+      const xmlLocalesString = js2xml(xmlLocalesData, { compact: false, ignoreComment: true, spaces: 2 });
       archive.append(xmlLocalesString, { name: `${containerName}.xml` });
 
       for (const [componentName, componentData] of Object.entries(componentsData)) {
         const xmlComponentData = {
           ...declaration,
-          [langCode]: componentData,
+          elements: componentData,
         };
 
-        const xmlComponentsString = js2xml(xmlComponentData, { compact: true, ignoreComment: true, spaces: 2 });
+        const xmlComponentsString = js2xml(xmlComponentData, { compact: false, ignoreComment: true, spaces: 2 });
         archive.append(xmlComponentsString, { name: `${containerName}/${componentName}.xml` });
       }
     }
@@ -826,10 +826,10 @@ export class Service {
 
       const result = localesData.map(({ key, value }: any) => `"${key}" = "${value}";`);
 
-      archive.append(result.join('\n'), { name: `${containerName}.txt` });
+      archive.append(result.join('\n'), { name: `${containerName}.strings` });
 
       for (const [componentName, componentData] of Object.entries(componentsData)) {
-        const txtComponentsString = componentData.map(({ key, value }: any) => `${key} = ${value}`).join('\n');
+        const txtComponentsString = componentData.map(({ key, value }: any) => `"${key}" = "${value}";`).join('\n');
 
         archive.append(txtComponentsString, { name: `${containerName}/${componentName}.strings` });
       }
