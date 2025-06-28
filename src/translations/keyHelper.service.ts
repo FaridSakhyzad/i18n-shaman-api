@@ -265,7 +265,7 @@ export class KeyHelperService {
     });
 
     const result: {
-      localesData: {}[];
+      localesData: any[];
       componentsData: { [key: string]: object[] };
     } = {
       localesData: [],
@@ -320,10 +320,12 @@ export class KeyHelperService {
           attributes: {
             name: labelArray.join('.'),
           },
-          elements: [{
-            type: 'text',
-            text: value,
-          }],
+          elements: [
+            {
+              type: 'text',
+              text: value,
+            },
+          ],
         });
       } else {
         result.localesData.push({
@@ -332,10 +334,12 @@ export class KeyHelperService {
           attributes: {
             name: labelArray.join('.'),
           },
-          elements: [{
-            type: 'text',
-            text: value,
-          }],
+          elements: [
+            {
+              type: 'text',
+              text: value,
+            },
+          ],
         });
       }
     });
