@@ -67,11 +67,13 @@ export class TransController {
   getUserProjectById(
     @Query('projectId') projectId: string,
     @Query('subFolderId') subFolderId: string,
-    @Query('page') page: number,
-    @Query('itemsPerPage') itemsPerPage: number,
+    @Query('page') page: string,
+    @Query('itemsPerPage') itemsPerPage: string,
     @Query('sortBy') sortBy: TSortBy,
     @Query('sortDirection') sortDirection: TSortDirection,
     @Query('filters') filters: string,
+    @Query('search') searchQuery: string,
+    @Query('search_params') searchParams: string,
     @Req() req,
   ): Promise<IProject> {
     const { session, sessionID } = req;
@@ -80,15 +82,20 @@ export class TransController {
       throw new UnauthorizedException('Error: Denied');
     }
 
+    console.log('page', typeof page);
+    console.log('itemsPerPage', typeof itemsPerPage);
+
     return this.Service.getUserProjectById({
       projectId,
-      page,
-      itemsPerPage,
+      page: parseInt(page, 10),
+      itemsPerPage: parseInt(itemsPerPage, 10),
       userId: session.userId,
       subFolderId,
       sortBy,
       sortDirection,
       filters: filters ? filters.split(',') : [],
+      searchQuery,
+      searchParams: searchQuery && searchParams ? searchParams.split(',') : [],
     } as GetProjectByIdDto);
   }
 

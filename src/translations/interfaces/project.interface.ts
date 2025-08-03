@@ -56,8 +56,27 @@ export interface IStructuredProjectLinearLocaleData {
 
 export enum EFilter {
   hideEmpty = 'hideEmpty',
-  hideNonEmpty = 'hideNonEmpty',
+  hidePartiallyPopulated = 'hidePartiallyPopulated',
+  hideFullyPopulated = 'hideFullyPopulated',
   hideFolders = 'hideFolders',
   hideComponents = 'hideComponents',
   hideKeys = 'hideKeys',
+}
+
+export enum ESearchParams {
+  caseSensitive = 'case_sensitive',
+  exactMatch = 'exact_match',
+  skipKeys = 'skip_keys',
+  skipFolders = 'skip_folders',
+  skipComponents = 'skip_components',
+  skipValues = 'skip_values',
+}
+
+export interface ISearchParams {
+  [ESearchParams.caseSensitive]: boolean;
+  [ESearchParams.exactMatch]: boolean;
+  [ESearchParams.skipKeys]: boolean;
+  [ESearchParams.skipValues]: boolean;
+  [ESearchParams.skipFolders]: boolean;
+  [ESearchParams.skipComponents]: boolean;
 }

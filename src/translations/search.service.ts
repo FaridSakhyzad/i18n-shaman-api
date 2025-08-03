@@ -58,10 +58,10 @@ export class SearchService {
     const keyMatchesByLabel = await this.keyModel.find({
       label: searchParams,
       projectId,
-      type: typesToSearch
+      type: typesToSearch,
     });
 
-    let valueMatchesByValue = []
+    let valueMatchesByValue = [];
 
     if (inValues) {
       valueMatchesByValue = await this.keyValueModel.find({

@@ -1,15 +1,17 @@
 import * as archiver from 'archiver';
 
 import { Model, SortOrder } from 'mongoose';
-import { Injectable, Inject, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { js2xml } from 'xml-js';
 
 import {
-  IStructuredProjectData,
+  EFilter,
+  ESearchParams,
   ILanguage,
   ILanguageMap,
   IProject,
-  IProjectLanguage, EFilter,
+  IProjectLanguage,
+  IStructuredProjectData,
 } from './interfaces/project.interface';
 
 import { EStatusCode, IResponse } from '../interfaces';
@@ -35,7 +37,7 @@ export class Service {
     @Inject('PROJECT_MODEL')
     private projectModel: Model<IProject>,
     @Inject('KEY_MODEL')
-    private keyModel: Model<IKey>,
+    private keyModel: Model<IKey> & { findWithNoOrEmptyValues: () => Promise<IKeyValue[]> },
     @Inject('KEY_VALUE_MODEL')
     private keyValueModel: Model<IKeyValue>,
     @Inject('RAW_LANGUAGE_MODEL')
@@ -253,7 +255,18 @@ export class Service {
   }
 
   async getUserProjectById(params: GetProjectByIdDto): Promise<IProject> {
-    const { projectId, page, itemsPerPage, userId, subFolderId, sortBy, sortDirection = 'asc', filters } = params;
+    const {
+      projectId,
+      page,
+      itemsPerPage,
+      userId,
+      subFolderId,
+      sortBy,
+      sortDirection = 'asc',
+      filters,
+      searchQuery,
+      searchParams,
+    } = params;
 
     const project = await this.projectModel
       .findOne({
@@ -290,12 +303,6 @@ export class Service {
     }
 
     const parentId = subFolderId || projectId;
-
-    const keysTotalCount = await this.keyModel.countDocuments({
-      userId,
-      projectId,
-      parentId,
-    });
 
     const sortParams: { [key: string]: SortOrder | { $meta: any } } = {
       type: 'asc',
@@ -345,27 +352,260 @@ export class Service {
       filterParams.type = [...filterParams.type];
     }
 
-    const keys: IKey[] = await this.keyModel
-      .find(
-        {
-          userId,
-          projectId,
-          parentId,
-          ...filterParams,
-        },
-        null,
-        {
-          limit: itemsPerPage,
-          skip: page * itemsPerPage,
-        },
-      )
-      .sort(sortParams);
+    const parentIdSettings = searchQuery && searchQuery.length > 0 ? {} : { parentId };
 
-    const aggregatedValues = await this.getAggregatedValues(userId, projectId, [parentId]);
+    const findParams = {
+      userId,
+      projectId,
+      ...parentIdSettings,
+      ...filterParams,
+    };
+
+    const keyIdsToExclude = [];
+
+    if (filterData[EFilter.hideEmpty]) {
+      const emptyKeys = await this.keyModel.aggregate([
+        {
+          $match: {
+            userId,
+            projectId,
+            parentId,
+            type: 'string',
+          },
+        },
+        {
+          $lookup: {
+            from: 'keyvalues',
+            localField: 'id',
+            foreignField: 'keyId',
+            as: 'values',
+          },
+        },
+        {
+          $match: {
+            $or: [
+              { values: { $eq: [] } },
+              {
+                $expr: {
+                  $allElementsTrue: {
+                    $map: {
+                      input: '$values',
+                      as: 'val',
+                      in: { $eq: ['$$val.content', ''] },
+                    },
+                  },
+                },
+              },
+            ],
+          },
+        },
+        {
+          $project: {
+            _id: 0,
+            id: 1,
+          },
+        },
+      ]);
+
+      keyIdsToExclude.push(...emptyKeys.map(({ id }) => id));
+    }
+
+    const { languages: projectLanguages } = project;
+
+    if (filterData[EFilter.hidePartiallyPopulated]) {
+      const partiallyPopulatedKeys = await this.keyModel.aggregate([
+        {
+          $match: {
+            userId,
+            projectId,
+            parentId,
+            type: 'string',
+          },
+        },
+        {
+          $lookup: {
+            from: 'keyvalues',
+            localField: 'id',
+            foreignField: 'keyId',
+            as: 'values',
+          },
+        },
+        {
+          $addFields: {
+            languageIds: {
+              $setUnion: '$values.languageId',
+            },
+          },
+        },
+        {
+          $match: {
+            $expr: {
+              $and: [
+                {
+                  $lt: [{ $size: '$languageIds' }, projectLanguages.length],
+                },
+                {
+                  $gt: [{ $size: '$languageIds' }, 0],
+                },
+              ],
+            },
+          },
+        },
+        {
+          $project: {
+            _id: 0,
+            id: 1,
+          },
+        },
+      ]);
+
+      keyIdsToExclude.push(...partiallyPopulatedKeys.map(({ id }) => id));
+    }
+
+    if (filterData[EFilter.hideFullyPopulated]) {
+      const fullyPopulatedKeys = await this.keyModel.aggregate([
+        {
+          $match: {
+            userId,
+            projectId,
+            parentId,
+            type: 'string',
+          },
+        },
+        {
+          $lookup: {
+            from: 'keyvalues',
+            localField: 'id',
+            foreignField: 'keyId',
+            as: 'values',
+          },
+        },
+        {
+          $addFields: {
+            languageIds: {
+              $setUnion: '$values.languageId',
+            },
+          },
+        },
+        {
+          $match: {
+            $expr: {
+              $eq: [{ $size: '$languageIds' }, projectLanguages.length],
+            },
+          },
+        },
+        {
+          $project: {
+            _id: 0,
+            id: 1,
+          },
+        },
+      ]);
+
+      keyIdsToExclude.push(...fullyPopulatedKeys.map(({ id }) => id));
+    }
+
+    Object.assign(findParams, {
+      id: { $nin: keyIdsToExclude },
+    });
+
+    let searchDbQueryParams: { $regex?: string; $options?: string } | null = null;
+
+    const searchParamsData = {};
+
+    searchParams.forEach((item: string) => {
+      searchParamsData[item] = true;
+    });
+
+    if (searchQuery && searchQuery.length > 0) {
+      searchDbQueryParams = {};
+
+      searchDbQueryParams.$regex = searchQuery;
+
+      if (!searchParamsData[ESearchParams.caseSensitive]) {
+        searchDbQueryParams.$options = 'i';
+      }
+
+      if (searchParamsData[ESearchParams.exactMatch]) {
+        searchDbQueryParams.$regex = `^${searchQuery}$`;
+      }
+
+      if (searchParamsData[ESearchParams.skipKeys] || searchParamsData[ESearchParams.skipFolders] || searchParamsData[ESearchParams.skipComponents]) {
+        findParams.type = new Set(findParams.type || ['string', 'folder', 'component']);
+
+        if (searchParamsData[ESearchParams.skipKeys]) {
+          findParams.type.delete('string');
+        }
+
+        if (searchParamsData[ESearchParams.skipComponents]) {
+          findParams.type.delete('component');
+        }
+
+        if (searchParamsData[ESearchParams.skipFolders]) {
+          findParams.type.delete('folder');
+        }
+
+        findParams.type = [...findParams.type];
+      }
+
+      findParams.label = searchDbQueryParams;
+    }
+
+    const sortParamsForAggregation = {};
+
+    Object.entries(sortParams).map(([key, value]) => {
+      sortParamsForAggregation[key] = value === 'asc' ? 1 : -1;
+    });
+
+    const searchResult = await this.keyModel.aggregate([
+      {
+        $lookup: {
+          from: 'keyvalues',
+          localField: 'id',
+          foreignField: 'keyId',
+          as: 'values',
+        },
+      },
+      {
+        $match: {
+          $or: [
+            findParams,
+            { 'values.value': searchDbQueryParams }
+          ]
+        },
+      },
+      {
+        $sort: sortParamsForAggregation,
+      },
+      {
+        $facet: {
+          items: [
+            { $skip: page * itemsPerPage },
+            { $limit: itemsPerPage },
+          ],
+          totalCount: [
+            { $count: 'count' }
+          ]
+        },
+      },
+    ]);
+
+    const {
+      items: keys,
+      totalCount: [{ count: keysTotalCount } = { count: 0 }],
+    } = searchResult[0];
+
+    const foundKeyIds = keys.map(({ id }) => id);
+
+    const aggregatedValuesParentIds = [parentId, ...foundKeyIds];
+
+    const aggregatedValues = searchParamsData[ESearchParams.skipValues]
+      ? [[]]
+      : await this.getAggregatedValues(userId, projectId, aggregatedValuesParentIds);
 
     return {
       ...project.toObject(),
-      keys,
+      keys: [...keys],
       values: aggregatedValues[0],
       keysTotalCount,
       upstreamParents,
@@ -799,8 +1039,6 @@ export class Service {
       .exec();
 
     const structuredData = await this.getStringsReadyArrayFromProject(userId, project);
-
-    console.log('structuredData', JSON.stringify(structuredData, null, 2));
 
     res.setHeader('Content-Type', 'application/zip');
     res.setHeader('Content-Disposition', 'attachment; filename=files.zip');
