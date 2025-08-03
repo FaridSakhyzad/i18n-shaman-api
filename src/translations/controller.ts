@@ -82,9 +82,6 @@ export class TransController {
       throw new UnauthorizedException('Error: Denied');
     }
 
-    console.log('page', typeof page);
-    console.log('itemsPerPage', typeof itemsPerPage);
-
     return this.Service.getUserProjectById({
       projectId,
       page: parseInt(page, 10),
