@@ -1,0 +1,20 @@
+<mjml>
+  <mj-head>
+    <mj-attributes>
+      <mj-all font-family="Arial, sans-serif" color="#222" />
+      <mj-text font-size="16px" line-height="1.5" />
+      <mj-button border-radius="6px" />
+      <mj-class name="headline" font-size="22px" font-weight="700" />
+      <mj-class name="muted" color="#6b7280" font-size="12px" />
+    </mj-attributes>
+  </mj-head>
+  <mj-body background-color="#f6f7fb">
+    {{> components/header }}
+    <mj-section padding="0 16px 24px 16px">
+      <mj-column>
+        {{{ body }}}  {{!-- место, куда дети вставят содержимое --}}
+      </mj-column>
+    </mj-section>
+    {{> components/footer }}
+  </mj-body>
+</mjml>

@@ -1,0 +1,11 @@
+<mj-section padding="0 16px 24px 16px" background-color="#f6f7fb">
+  <mj-column>
+    <mj-text align="center" mj-class="muted">
+      © {{year}} {{productName}} • {{companyAddress}}
+    </mj-text>
+    <mj-text align="center" mj-class="muted">
+      <a href="{{unsubscribeUrl}}">Отписаться</a> ·
+      <a href="{{preferencesUrl}}">Настройки</a>
+    </mj-text>
+  </mj-column>
+</mj-section>

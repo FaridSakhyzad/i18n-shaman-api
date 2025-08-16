@@ -22,12 +22,14 @@ async function bootstrap() {
       store: MongoStore.create({
         mongoUrl: 'mongodb://localhost:27017',
         dbName: 'i18nShaman',
+        collectionName: 'sessions',
+        ttl: 14 * 24 * 60 * 60,
       }),
       secret: process.env.SECRET,
       resave: false,
       saveUninitialized: false,
       cookie: {
-        maxAge: 1000 * 60 * 60 * 24,
+        maxAge: 1000 * 60 * 60 * 24 * 14,
       },
     }),
   );

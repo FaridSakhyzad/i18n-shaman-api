@@ -1,0 +1,21 @@
+<mj-section padding="0">
+  <mj-column>
+    <mj-text mj-class="headline">Добро пожаловать 👋</mj-text>
+    <mj-text>Привет, {{name}}! Рады видеть тебя в {{productName}}.</mj-text>
+
+    {{#if features.length}}
+      <mj-text>Что нового:</mj-text>
+      {{#each features}}
+        <mj-text>• {{this}}</mj-text>
+      {{/each}}
+    {{/if}}
+
+    <mj-button href="{{ctaUrl}}" background-color="#4f46e5" color="#fff">
+      Открыть {{productName}}
+    </mj-button>
+
+    <mj-text mj-class="muted">
+      Если кнопка не работает, перейди по ссылке: {{ctaUrl}}
+    </mj-text>
+  </mj-column>
+</mj-section>

@@ -1,6 +1,9 @@
 import { Inject, Injectable, ConflictException } from '@nestjs/common';
 import { Model } from 'mongoose';
 import * as bcrypt from 'bcrypt';
+
+import { MailService } from '../email/mail.service';
+
 import { IUser, IUserDataForClient } from './interfaces/user.interface';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
@@ -10,6 +13,7 @@ export class AuthService {
   constructor(
     @Inject('USER_MODEL')
     private userModel: Model<IUser>,
+    private readonly mailService: MailService,
   ) {}
 
   async createUser({ login, password }: RegisterDto): Promise<IUserDataForClient | Error> {
@@ -73,5 +77,9 @@ export class AuthService {
         language: settings.language,
       },
     } as IUserDataForClient;
+  }
+
+  async resetPassword(email: string) {
+    return this.mailService.sendHelloWorld(email);
   }
 }

@@ -15,3 +15,7 @@ export interface IUserDataForClient extends IUser {
   id: string;
   login: string;
 }
+
+export interface IResetPasswordResponse {
+  result: string;
+}

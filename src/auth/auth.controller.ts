@@ -1,8 +1,8 @@
-import { Body, Req, ConflictException, Controller, Get, Post } from '@nestjs/common';
+import { Body, Req, ConflictException, Controller, Get, Post, Query } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
-import { IUser } from './interfaces/user.interface';
+import { IResetPasswordResponse, IUser } from './interfaces/user.interface';
 
 @Controller('auth')
 export class AuthController {
@@ -31,5 +31,16 @@ export class AuthController {
     }
 
     return this.authService.verifyUser(session.userId);
+  }
+
+  @Get('resetPassword')
+  async resetPassword(@Req() req, @Query('email') email: string): Promise<IResetPasswordResponse | Error | string> {
+    const { session, sessionID } = req;
+
+    if (session || sessionID || session.userId) {
+      //return new ConflictException('Error: Logout Before Reset Password');
+    }
+
+    return this.authService.resetPassword(email);
   }
 }
