@@ -1,6 +1,3 @@
-import { readFileSync } from 'fs';
-import { join } from 'path';
-import * as mjml2html from 'mjml';
 import { EmailTemplateService } from './template.service';
 
 import { Injectable } from '@nestjs/common';
@@ -25,32 +22,20 @@ export class MailService {
     });
   }
 
-  private async renderMjml(templateName: string, vars: Record<string, string>) {
-    let src = readFileSync(join('./src/emailTemplates', `${templateName}.mjml`), 'utf8');
-
-    // Простейшие плейсхолдеры {{var}}
-    for (const [k, v] of Object.entries(vars)) {
-      src = src.replaceAll(`{{${k}}}`, v ?? '');
-    }
-
-    const { html, errors } = mjml2html(src, { minify: true });
-
-    if (errors?.length) {
-      console.error(errors);
-    }
-
-    return html;
-  }
-
   async sendHelloWorld(to: string) {
-    const html = await this.tpl.render('welcome', {
-      productName: 'i18 Shaman',
-      logoUrl: 'https://your.cdn/logo.png',
-      companyAddress: 'Calgary, AB',
-      unsubscribeUrl: 'https://app.example.com/unsub',
-      preferencesUrl: 'https://app.example.com/preferences',
-      ctaUrl: 'https://app.example.com/cta',
-    });
+    const html = await this.tpl.render(
+      {
+        templateName: 'welcome',
+      },
+      {
+        productName: 'i18 Shaman',
+        logoUrl: 'https://your.cdn/logo.png',
+        companyAddress: 'Calgary, AB',
+        unsubscribeUrl: 'https://app.example.com/unsub',
+        preferencesUrl: 'https://app.example.com/preferences',
+        ctaUrl: 'https://app.example.com/cta',
+      },
+    );
 
     const mailOptions = {
       from: `"i18 Shaman" <no-reply@i18shaman.io>`,
@@ -58,8 +43,6 @@ export class MailService {
       subject: 'Добро пожаловать 👋',
       html,
     };
-
-    console.log('mailOptions', mailOptions);
 
     try {
       return await this.transporter.sendMail(mailOptions);

@@ -37,25 +37,25 @@ export class EmailTemplateService {
     Handlebars.registerHelper('and', function (...args) {
       return args.slice(0, -1).every(Boolean);
     });
-
-    const layoutSrc = await fs.readFile(path.join(this.baseDir, 'layouts/mainDefault.mjml'), 'utf8');
-
-    this.layoutTpl = Handlebars.compile(layoutSrc, { noEscape: false });
   }
 
-  async render(templateName: string, ctx: Ctx) {
+  async render({ templateName, layout = 'mainDefault' }: { templateName: string; layout?: string }, ctx: Ctx) {
     const childSrc = await fs.readFile(path.join('./src/emailTemplates', `${templateName}.mjml`), 'utf8');
 
-    const childTpl = Handlebars.compile(childSrc);
+    const bodyCompiler = Handlebars.compile(childSrc);
 
     const fullCtx: Ctx = {
       year: new Date().getFullYear(),
       ...ctx,
     };
 
-    const body = childTpl(fullCtx);
+    const body = bodyCompiler(fullCtx);
 
-    const layoutHtml = this.layoutTpl({ ...fullCtx, body });
+    const layoutSrc = await fs.readFile(path.join(this.baseDir, `layouts/${layout}.mjml`), 'utf8');
+
+    const layoutCompiler = Handlebars.compile(layoutSrc, { noEscape: false });
+
+    const layoutHtml = layoutCompiler({ ...fullCtx, body });
 
     const { html, errors } = (mjml2html as any)(layoutHtml, {
       minify: true,
@@ -64,7 +64,6 @@ export class EmailTemplateService {
 
     if (errors?.length) {
       console.error('EMAIL TEMPLATES COMPILATION FAILED.');
-
       console.error(errors);
     }
 
