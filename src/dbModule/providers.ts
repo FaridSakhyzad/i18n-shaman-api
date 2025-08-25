@@ -4,6 +4,8 @@ import { KeySchema } from '../translations/schemas/Key.schema';
 import { UserSchema } from '../user/schemas/User.schema';
 import { RawLanguageSchema } from '../translations/schemas/RawLanguage.schema';
 import { KeyValueSchema } from '../translations/schemas/KeyValue.schema';
+import { SessionSchema } from '../auth/schemas/Session.schema';
+import { TokenSchema } from '../auth/schemas/Token.schema';
 
 export const Providers = [
   {
@@ -29,6 +31,16 @@ export const Providers = [
   {
     provide: 'USER_MODEL',
     useFactory: (connection: Connection) => connection.model('User', UserSchema),
+    inject: ['DATABASE_CONNECTION'],
+  },
+  {
+    provide: 'SESSION_MODEL',
+    useFactory: (connection: Connection) => connection.model('Session', SessionSchema),
+    inject: ['DATABASE_CONNECTION'],
+  },
+  {
+    provide: 'TOKEN_MODEL',
+    useFactory: (connection: Connection) => connection.model('Token', TokenSchema),
     inject: ['DATABASE_CONNECTION'],
   },
 ];

@@ -6,16 +6,23 @@ export interface IUserSettings extends Document {
 
 export interface IUser extends Document {
   id: string;
-  login: string;
+  email: string;
   password: string;
+  createdAt: Date;
   settings: IUserSettings;
 }
 
-export interface IUserDataForClient extends IUser {
+export interface IPublicUserData {
   id: string;
-  login: string;
+  email: string;
+  settings?: IUserSettings;
 }
 
 export interface IResetPasswordResponse {
   result: string;
+}
+
+export interface ISession extends Document {
+  expires: Date;
+  session: object;
 }

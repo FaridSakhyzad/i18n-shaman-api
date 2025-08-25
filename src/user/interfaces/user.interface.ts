@@ -6,7 +6,7 @@ export interface IUserSettings extends Document {
 
 export interface IUser extends Document {
   id: string;
-  login: string;
+  email: string;
   password: string;
   settings: IUserSettings;
 }

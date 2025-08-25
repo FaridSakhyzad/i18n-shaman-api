@@ -1,4 +1,10 @@
 export class RegisterDto {
-  login: string;
+  email: string;
   password: string;
+}
+
+export class SetNewPasswordDto {
+  password: string;
+  resetToken: string;
+  securityToken: string;
 }

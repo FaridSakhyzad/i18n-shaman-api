@@ -22,25 +22,20 @@ export class MailService {
     });
   }
 
-  async sendHelloWorld(to: string) {
+  async sendResetPasswordEmail(to: string, resetToken: string) {
     const html = await this.tpl.render(
       {
-        templateName: 'welcome',
+        templateName: 'resetPassword',
       },
       {
-        productName: 'i18 Shaman',
-        logoUrl: 'https://your.cdn/logo.png',
-        companyAddress: 'Calgary, AB',
-        unsubscribeUrl: 'https://app.example.com/unsub',
-        preferencesUrl: 'https://app.example.com/preferences',
-        ctaUrl: 'https://app.example.com/cta',
+        resetPasswordUrl: `${process.env.FRONTENT_URL}/reset-password/${resetToken}`,
       },
     );
 
     const mailOptions = {
       from: `"i18 Shaman" <no-reply@i18shaman.io>`,
       to,
-      subject: 'Добро пожаловать 👋',
+      subject: 'Password Reset',
       html,
     };
 

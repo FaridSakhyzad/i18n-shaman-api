@@ -1,85 +1,149 @@
-import { Inject, Injectable, ConflictException } from '@nestjs/common';
-import { Model } from 'mongoose';
+import { Inject, Injectable, ConflictException, UnauthorizedException } from '@nestjs/common';
+import { Model, Types } from 'mongoose';
 import * as bcrypt from 'bcrypt';
 
 import { MailService } from '../email/mail.service';
 
-import { IUser, IUserDataForClient } from './interfaces/user.interface';
+import { IUser, IPublicUserData, ISession } from './interfaces/user.interface';
+import { IToken } from './interfaces/token.interface';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
+import { TokenService } from './token.service';
 
 @Injectable()
 export class AuthService {
   constructor(
     @Inject('USER_MODEL')
     private userModel: Model<IUser>,
+    @Inject('SESSION_MODEL')
+    private sessionModel: Model<ISession>,
+    @Inject('TOKEN_MODEL')
+    private tokenModel: Model<IToken>,
+
     private readonly mailService: MailService,
+    private readonly tokenService: TokenService,
   ) {}
 
-  async createUser({ login, password }: RegisterDto): Promise<IUserDataForClient | Error> {
+  async createUser({ email, password }: RegisterDto): Promise<IPublicUserData | Error> {
     const encryptedPassword = await bcrypt.hash(password, 12);
 
-    const existingUser = await this.userModel.findOne({ login }).exec();
+    const existingUser = await this.userModel.findOne({ email }).exec();
 
     if (existingUser) {
-      throw new ConflictException('User with this login already exists');
+      throw new ConflictException('User already exists');
     }
 
     const newUser = new this.userModel({
-      login,
+      email,
       password: encryptedPassword,
       createdAt: new Date(),
       role: 'user',
+      settings: {
+        language: 'en',
+      },
     });
 
     const newUserDocument = await newUser.save();
 
     return {
       id: newUserDocument._id as string,
-      login: newUserDocument.login,
-    } as IUserDataForClient;
+      email: newUserDocument.email,
+    } as IPublicUserData;
   }
 
-  async loginUser({ login, password }: LoginDto, session): Promise<IUserDataForClient | Error> {
-    const user = await this.userModel.findOne({ login }).exec();
+  async loginUser({ email, password }: LoginDto, session): Promise<IPublicUserData | Error> {
+    const user = await this.userModel.findOne({ email }).exec();
 
     if (!user) {
-      throw new ConflictException('User not found');
+      throw new UnauthorizedException('Login/Passwords combination is incorrect');
     }
 
     const comparisonResult = await bcrypt.compare(password, user.password);
 
     if (!comparisonResult) {
-      throw new ConflictException('Incorrect Password');
+      throw new UnauthorizedException('Login/Passwords combination is incorrect');
     }
 
     session.userId = user._id;
+    session.userLoggedIn = true;
 
     return {
       id: user._id as string,
-      login: user.login,
-    } as IUserDataForClient;
+      email: user.email,
+    } as IPublicUserData;
   }
 
-  async verifyUser(userId: string): Promise<IUserDataForClient | Error> {
+  async logoutUser(userId: string) {
+    const deleteResult = await this.sessionModel.deleteMany({
+      'session.userId': new Types.ObjectId(userId),
+    });
+
+    return 'ok';
+  }
+
+  async verifyUser(userId: string): Promise<IPublicUserData | Error> {
     const user = await this.userModel.findOne({ _id: userId }).exec();
 
     if (!user) {
       return new ConflictException('User Not Found');
     }
 
-    const { settings } = user;
-
     return {
       id: user._id as string,
-      login: user.login,
-      settings: {
-        language: settings.language,
-      },
-    } as IUserDataForClient;
+      email: user.email,
+    } as IPublicUserData;
   }
 
-  async resetPassword(email: string) {
-    return this.mailService.sendHelloWorld(email);
+  async resetPasswordRequest(email: string): Promise<{ userId: string; resetToken: string }> {
+    const user = await this.userModel.findOne({ email }).exec();
+
+    await this.tokenModel.deleteMany({
+      userId: user._id,
+      type: 'password_reset',
+    });
+
+    const resetTokenDocument = await this.tokenService.createToken({
+      userId: user._id as string,
+      type: 'password_reset',
+      expiresInMinutes: 60,
+    });
+
+    await this.mailService.sendResetPasswordEmail(email, resetTokenDocument.token);
+
+    return {
+      userId: user._id as string,
+      resetToken: resetTokenDocument.token,
+    };
+  }
+
+  async createPasswordResetSecurityToken(userId: string): Promise<string> {
+    await this.tokenModel.deleteMany({
+      userId,
+      type: 'password_reset_security',
+    });
+
+    const resetSecurityTokenDocument = await this.tokenService.createToken({
+      userId,
+      type: 'password_reset_security',
+      expiresInMinutes: 60,
+    });
+
+    return resetSecurityTokenDocument ? resetSecurityTokenDocument.token : null;
+  }
+
+  async setNewPassword(userId: string, password: string) {
+    await this.tokenModel.deleteMany({
+      userId,
+      type: ['password_reset_security', 'password_reset'],
+    });
+
+    const result = await this.userModel.updateOne(
+      { _id: userId },
+      {
+        password: await bcrypt.hash(password, 12),
+      },
+    );
+
+    return result;
   }
 }

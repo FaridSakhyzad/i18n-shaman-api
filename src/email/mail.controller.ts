@@ -1,14 +1,7 @@
-import { Controller, Post, Body } from '@nestjs/common';
+import { Controller } from '@nestjs/common';
 import { MailService } from './mail.service';
 
 @Controller('mail')
 export class MailController {
   constructor(private readonly mailService: MailService) {}
-
-  @Post('send')
-  async sendMail(@Body('email') email: string) {
-    await this.mailService.sendHelloWorld(email);
-
-    return { message: 'Письмо отправлено' };
-  }
 }
