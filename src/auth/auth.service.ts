@@ -1,5 +1,5 @@
 import { Inject, Injectable, ConflictException, UnauthorizedException } from '@nestjs/common';
-import { Model, Types } from 'mongoose';
+import { Model, Types, UpdateWriteOpResult } from 'mongoose';
 import * as bcrypt from 'bcrypt';
 
 import { MailService } from '../email/mail.service';
@@ -135,6 +135,28 @@ export class AuthService {
     await this.tokenModel.deleteMany({
       userId,
       type: ['password_reset_security', 'password_reset'],
+    });
+
+    const result = await this.userModel.updateOne(
+      { _id: userId },
+      {
+        password: await bcrypt.hash(password, 12),
+      },
+    );
+
+    return result;
+  }
+
+  async verifyUserPassword(userId: string, password: string): Promise<boolean> {
+    const user = await this.userModel.findOne({ _id: userId });
+
+    return await bcrypt.compare(password, user.password);
+  }
+
+  async updatePassword(userId: string, password: string): Promise<UpdateWriteOpResult> {
+    await this.tokenModel.deleteMany({
+      userId,
+      type: ['password_update'],
     });
 
     const result = await this.userModel.updateOne(

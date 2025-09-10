@@ -8,9 +8,10 @@ import { TranslationsModule } from './translations/module';
 import { AuthModule } from './auth/auth.module';
 import { UserModule } from './user/user.module';
 import { MailModule } from './email/mail.module';
+import { ValidationModule } from './validation/validation.module';
 
 @Module({
-  imports: [ConfigModule.forRoot(), TranslationsModule, AuthModule, UserModule, MailModule],
+  imports: [ConfigModule.forRoot(), TranslationsModule, AuthModule, UserModule, MailModule, ValidationModule],
   controllers: [AppController],
   providers: [AppService],
 })

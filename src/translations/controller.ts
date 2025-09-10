@@ -86,7 +86,7 @@ export class TransController {
       projectId,
       page: parseInt(page, 10),
       itemsPerPage: parseInt(itemsPerPage, 10),
-      userId: session.userId,
+      userId: session.userId.toString(),
       subFolderId,
       sortBy,
       sortDirection,

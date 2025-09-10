@@ -22,6 +22,14 @@ export interface IResetPasswordResponse {
   result: string;
 }
 
+export interface IUpdatePassword {
+  userId: string;
+  securityToken: string;
+  password: string;
+  newPassword: string;
+  confirmPassword: string;
+}
+
 export interface ISession extends Document {
   expires: Date;
   session: object;

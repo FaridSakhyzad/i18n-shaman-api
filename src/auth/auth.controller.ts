@@ -2,9 +2,10 @@ import { Body, Req, ConflictException, Controller, Get, Post, Query, HttpStatus,
 import { AuthService } from './auth.service';
 import { LoginDto, LogoutDto } from './dto/login.dto';
 import { RegisterDto, SetNewPasswordDto } from './dto/register.dto';
-import { IResetPasswordResponse, IPublicUserData } from './interfaces/user.interface';
+import { IResetPasswordResponse, IPublicUserData, IUpdatePassword } from './interfaces/user.interface';
 import { ApiResponse, ProblemDetails } from '../interfaces';
 import { TokenService } from './token.service';
+import { ValidationService } from '../validation/validation.servise';
 import { Model } from 'mongoose';
 import { IToken } from './interfaces/token.interface';
 
@@ -16,6 +17,7 @@ export class AuthController {
 
     private readonly authService: AuthService,
     private readonly tokenService: TokenService,
+    private readonly validationService: ValidationService,
   ) {}
 
   @Post('login')
@@ -106,7 +108,7 @@ export class AuthController {
 
   @Get('getPasswordResetSecurityToken')
   async getPasswordResetSecurityToken(@Req() req): Promise<ProblemDetails | ApiResponse<any>> {
-    if (!req.session.userId) {
+    if (!req.session.userId || !req.session.userLoggedIn) {
       return {
         type: '',
         title: 'Insufficient credentials',
@@ -233,6 +235,98 @@ export class AuthController {
     return {
       success: !used && resetToken === token,
       data: { token, used },
+      requestId: req.headers['x-request-id'],
+      timestamp: nowDate,
+      path: req.url as string,
+    };
+  }
+
+  @Get('getUpdatePasswordSecurityToken')
+  async getUpdatePasswordSecurityToken(@Req() req, @Query('userId') userId: string): Promise<ProblemDetails | ApiResponse<any>> {
+    const { session } = req;
+
+    const nowDate = new Date().toISOString();
+
+    if (!session || !session.userId || !session.userLoggedIn || userId !== session.userId.toString()) {
+      return {
+        type: '',
+        title: 'Get Update Password Token Failed',
+        status: HttpStatus.FORBIDDEN,
+        detail: 'Error: Forbidden',
+        code: '403',
+        errors: [],
+        requestId: req.headers['x-request-id'],
+        timestamp: nowDate,
+      };
+    }
+
+    await this.tokenModel.deleteMany({
+      userId: session.userId,
+      type: 'password_update',
+    });
+
+    const updateTokenDocument = await this.tokenService.createToken({
+      userId: session.userId,
+      type: 'password_update',
+      expiresInMinutes: 10,
+    });
+
+    session.passwordUpdateToken = updateTokenDocument.token;
+
+    return {
+      success: true,
+      data: { token: updateTokenDocument.token },
+      requestId: req.headers['x-request-id'],
+      timestamp: nowDate,
+      path: req.url as string,
+    };
+  }
+
+  @Post('updatePassword')
+  async updatePassword(@Req() req, @Body() { userId, securityToken, password, newPassword, confirmPassword }: IUpdatePassword): Promise<ProblemDetails | ApiResponse<any>> {
+    const { session } = req;
+
+    const isPasswordValid = await this.authService.verifyUserPassword(userId, password);
+
+    const updateTokenDocument = await this.tokenService.verifyToken(securityToken, 'password_update');
+
+    const nowDate = new Date().toISOString();
+
+    if (!isPasswordValid || !updateTokenDocument || !session || !session.userId || !session.userLoggedIn || userId !== session.userId.toString()) {
+      return {
+        type: '',
+        title: 'Update Password Failed',
+        status: HttpStatus.FORBIDDEN,
+        detail: 'Error: Forbidden',
+        code: '403',
+        errors: [],
+        requestId: req.headers['x-request-id'],
+        timestamp: nowDate,
+      };
+    }
+
+    const validationResult = this.validationService.validatePassword(newPassword);
+
+    if (newPassword !== confirmPassword || !validationResult.success) {
+      return {
+        type: '',
+        title: 'Update Password Failed',
+        status: HttpStatus.NOT_ACCEPTABLE,
+        detail: 'Error: Not Acceptable',
+        code: '406',
+        errors: validationResult.errors ? validationResult.errors.map((error) => ({ ...error, field: 'password' })) : [],
+        requestId: req.headers['x-request-id'],
+        timestamp: nowDate,
+      };
+    }
+
+    const updatePasswordResult = await this.authService.updatePassword(session.userId, newPassword);
+
+    delete session.passwordUpdateToken;
+
+    return {
+      success: true,
+      data: {},
       requestId: req.headers['x-request-id'],
       timestamp: nowDate,
       path: req.url as string,

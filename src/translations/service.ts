@@ -817,6 +817,9 @@ export class Service {
   }
 
   async getMultipleEntitiesDataByParentId(projectId: string, parentId: string): Promise<IKey[]> {
+    console.log('projectId', projectId);
+    console.log('parentId', parentId);
+
     const result = await this.keyModel.find({ projectId, parentId });
 
     return result;
