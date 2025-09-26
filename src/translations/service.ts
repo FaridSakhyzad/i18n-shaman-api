@@ -979,7 +979,7 @@ export class Service {
       })
       .exec();
 
-    const linearData = await this.getXmlReadyLinearDataFromProject(userId, project);
+    const linearData = await this.getXmlReadyLinearDataFromProject(userId.toString(), project);
 
     res.setHeader('Content-Type', 'application/zip');
     res.setHeader('Content-Disposition', 'attachment; filename=files.zip');

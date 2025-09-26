@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { Model } from 'mongoose';
-import { IUser } from './interfaces/user.interface';
+import { IUser, IUserPreferences } from './interfaces/user.interface';
 
 @Injectable()
 export class UserService {
@@ -16,6 +16,17 @@ export class UserService {
         settings: {
           language: language,
         },
+      },
+    );
+
+    return 'OK';
+  }
+
+  async savePreferences(userId: string, data: IUserPreferences) {
+    const result = await this.userModel.updateOne(
+      { _id: userId },
+      {
+        preferences: data,
       },
     );
 

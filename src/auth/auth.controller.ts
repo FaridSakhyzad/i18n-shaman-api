@@ -108,7 +108,7 @@ export class AuthController {
 
   @Get('getPasswordResetSecurityToken')
   async getPasswordResetSecurityToken(@Req() req): Promise<ProblemDetails | ApiResponse<any>> {
-    if (!req.session.userId || !req.session.userLoggedIn) {
+    if (req.session.userId && req.session.userLoggedIn) {
       return {
         type: '',
         title: 'Insufficient credentials',

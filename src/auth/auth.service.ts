@@ -88,9 +88,14 @@ export class AuthService {
       return new ConflictException('User Not Found');
     }
 
+    const { _id, email, preferences } = user;
+
+    console.log('user', user);
+
     return {
-      id: user._id as string,
-      email: user.email,
+      id: _id.toString(),
+      email,
+      preferences,
     } as IPublicUserData;
   }
 

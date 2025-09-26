@@ -210,7 +210,7 @@ export class TransController {
   ): Promise<IResponse> {
     const { session, sessionID } = req;
 
-    if (!session || !sessionID || !session.userId) {
+    if (!session || !sessionID || !session.userId || !session.userLoggedIn) {
       throw new UnauthorizedException('Error: Denied');
     }
 
@@ -242,7 +242,7 @@ export class TransController {
   ) {
     const { session, sessionID } = req;
 
-    if (!session || !sessionID || !session.userId) {
+    if (!session || !sessionID || !session.userId || !session.userLoggedIn) {
       throw new UnauthorizedException('Error: Denied');
     }
 
@@ -259,7 +259,7 @@ export class TransController {
   ) {
     const { session, sessionID } = req;
 
-    if (!session || !sessionID || !session.userId) {
+    if (!session || !sessionID || !session.userId || !session.userLoggedIn) {
       throw new UnauthorizedException('Error: Denied');
     }
 
@@ -280,7 +280,7 @@ export class TransController {
   async addMultipleRawLanguages(@Body() data: any[], @Req() req) {
     const { session, sessionID } = req;
 
-    if (!session || !sessionID || !session.userId) {
+    if (!session || !sessionID || !session.userId || !session.userLoggedIn) {
       throw new UnauthorizedException('Error: Denied');
     }
 

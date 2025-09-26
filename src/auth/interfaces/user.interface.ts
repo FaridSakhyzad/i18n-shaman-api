@@ -1,4 +1,5 @@
 import { Document } from 'mongoose';
+import { IUserPreferences } from '../../user/interfaces/user.interface';
 
 export interface IUserSettings extends Document {
   language: string | undefined;
@@ -10,12 +11,14 @@ export interface IUser extends Document {
   password: string;
   createdAt: Date;
   settings: IUserSettings;
+  preferences: IUserPreferences;
 }
 
 export interface IPublicUserData {
   id: string;
   email: string;
   settings?: IUserSettings;
+  preferences?: IUserPreferences;
 }
 
 export interface IResetPasswordResponse {

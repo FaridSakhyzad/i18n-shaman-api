@@ -1,8 +1,10 @@
-import { Controller, Post, Body } from '@nestjs/common';
+import { Controller, UseGuards, Post, Body } from '@nestjs/common';
 import { UserService } from './user.service';
-import { SetLanguageDto } from './dto/setLanguage.dto';
+import { AuthGuard } from '../auth/auth.guard';
+import { SetLanguageDto, SetPreferencesDto } from './dto/setLanguage.dto';
 
 @Controller('user')
+@UseGuards(AuthGuard)
 export class UserController {
   constructor(private readonly userService: UserService) {}
 
@@ -11,5 +13,12 @@ export class UserController {
     const { userId, language } = setLanguageDto;
 
     return this.userService.setLanguage(userId, language);
+  }
+
+  @Post('savePreferences')
+  async savePreferences(@Body() setPreferencesDto: SetPreferencesDto): Promise<string> {
+    const { userId, data } = setPreferencesDto;
+
+    return this.userService.savePreferences(userId, data);
   }
 }
