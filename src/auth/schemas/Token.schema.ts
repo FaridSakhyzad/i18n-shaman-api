@@ -5,7 +5,7 @@ export const TokenSchema = new Schema({
   token: { type: String, required: true, unique: true },
   type: {
     type: String,
-    enum: ['email_verification', 'password_reset', 'password_reset_security', 'password_update'],
+    enum: ['email_verification', 'email_verification_security', 'password_reset', 'password_reset_security', 'password_update'],
     required: true,
   },
   createdAt: { type: Date, default: Date.now },

@@ -1,0 +1,3 @@
+<mj-text mj-class="headline">Click to the link below to activate your account</mj-text>
+
+<mj-button href="{{verificationUrl}}" background-color="#4f46e5" color="#fff">{{verificationUrl}}</mj-button>

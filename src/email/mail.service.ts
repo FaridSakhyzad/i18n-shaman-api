@@ -45,4 +45,28 @@ export class MailService {
       throw err;
     }
   }
+
+  async sendEmailVerification(to: string, verificationLinkToken: string) {
+    const html = await this.tpl.render(
+      {
+        templateName: 'verifyUserEmail',
+      },
+      {
+        verificationUrl: `${process.env.FRONTENT_URL}/verify-email/${verificationLinkToken}`,
+      },
+    );
+
+    const mailOptions = {
+      from: `"i18 Shaman" <no-reply@i18shaman.io>`,
+      to,
+      subject: 'Account Activation',
+      html,
+    };
+
+    try {
+      return await this.transporter.sendMail(mailOptions);
+    } catch (err) {
+      throw err;
+    }
+  }
 }

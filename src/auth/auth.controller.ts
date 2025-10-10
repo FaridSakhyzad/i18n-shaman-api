@@ -55,6 +55,10 @@ export class AuthController {
 
     try {
       data = await this.authService.createUser(registerDto);
+
+      const { id: newUserId, email } = data;
+
+      await this.authService.initEmailVerification(email, newUserId.toString());
     } catch (error) {
       const body = error.getResponse() as any;
 
@@ -73,6 +77,125 @@ export class AuthController {
     return {
       success: true,
       data,
+      requestId: req.headers['x-request-id'],
+      timestamp: nowDate,
+      path: req.url as string,
+    };
+  }
+
+  //: Promise<ApiResponse<any> | ProblemDetails>
+
+  @Post('validateVerificationToken')
+  async validateVerificationToken(@Req() req, @Body() { verificationToken }: { verificationToken: string }) {
+    const verificationTokenDocument = await this.tokenService.verifyToken(verificationToken, 'email_verification');
+
+    const nowDate = new Date().toISOString();
+
+    if (!verificationTokenDocument) {
+      return {
+        type: '',
+        title: 'Verification Token is Invalid',
+        status: HttpStatus.BAD_REQUEST,
+        detail: 'Error: Forbidden',
+        code: '400',
+        errors: [],
+        requestId: req.headers['x-request-id'],
+        timestamp: nowDate,
+      };
+    }
+
+    const { token, used } = verificationTokenDocument;
+
+    return {
+      success: !used && verificationToken === token,
+      data: { token, used },
+      requestId: req.headers['x-request-id'],
+      timestamp: nowDate,
+      path: req.url as string,
+    };
+  }
+
+  @Post('getEmailVerificationSecurityToken')
+  async getEmailVerificationSecurityToken(@Req() req, @Body() { verificationToken }: { verificationToken: string }) {
+    console.log('getEmailVerificationSecurityToken');
+    console.log('verificationToken', verificationToken);
+
+    const verificationTokenDocument = await this.tokenModel.findOne({
+      token: verificationToken,
+      type: 'email_verification',
+    });
+
+    const nowDate = new Date().toISOString();
+
+    if (!verificationTokenDocument) {
+      return {
+        type: '',
+        title: 'Verification Token not Found',
+        status: HttpStatus.NOT_FOUND,
+        detail: 'Error: Forbidden',
+        code: '400',
+        errors: [],
+        requestId: req.headers['x-request-id'],
+        timestamp: nowDate,
+      };
+    }
+
+    console.log('verificationTokenDocument', verificationTokenDocument);
+
+    const emailVerificationSecurityToken = await this.authService.createEmailVerificationSecurityToken(verificationTokenDocument.userId.toString());
+
+    console.log('emailVerificationSecurityToken', emailVerificationSecurityToken);
+    console.log(' ');
+    console.log(' ');
+    console.log('*');
+    console.log(' ');
+    console.log(' ');
+
+    return {
+      success: true,
+      data: {
+        token: emailVerificationSecurityToken,
+      },
+      requestId: req.headers['x-request-id'],
+      timestamp: nowDate,
+      path: req.url as string,
+    };
+  }
+
+  @Post('verifyEmail')
+  async verifyEmail(@Req() req, @Body() { verificationToken, verificationSecurityToken }: { verificationToken: string; verificationSecurityToken: string }) {
+    const verificationTokenDocument = await this.tokenService.verifyToken(verificationToken, 'email_verification');
+    const verificationSecurityTokenDocument = await this.tokenService.verifyToken(verificationSecurityToken, 'email_verification_security');
+
+    const nowDate = new Date().toISOString();
+
+    if (!verificationSecurityTokenDocument || !verificationTokenDocument) {
+      return {
+        type: '',
+        title: 'Verification Security Token is Invalid',
+        status: HttpStatus.BAD_REQUEST,
+        detail: 'Error: Forbidden',
+        code: '400',
+        errors: [],
+        requestId: req.headers['x-request-id'],
+        timestamp: nowDate,
+      };
+    }
+
+    const emailVerificationResult = await this.authService.verifyEmail(
+      verificationSecurityTokenDocument.userId.toString(),
+      verificationTokenDocument,
+    );
+
+    const { token, used } = verificationSecurityTokenDocument;
+
+    return {
+      success: emailVerificationResult.success,
+      data: {
+        token,
+        used,
+        message: emailVerificationResult.data,
+      },
       requestId: req.headers['x-request-id'],
       timestamp: nowDate,
       path: req.url as string,

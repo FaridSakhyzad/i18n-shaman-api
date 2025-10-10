@@ -37,6 +37,7 @@ export class AuthService {
       email,
       password: encryptedPassword,
       createdAt: new Date(),
+      verificationEpoch: new Date(),
       role: 'user',
       settings: {
         language: 'en',
@@ -49,6 +50,81 @@ export class AuthService {
       id: newUserDocument._id as string,
       email: newUserDocument.email,
     } as IPublicUserData;
+  }
+
+  async initEmailVerification(email: string, userId: string): Promise<void> {
+    await this.tokenModel.deleteMany({ userId });
+
+    const verifyEmailTokenDocument = await this.tokenService.createToken({
+      userId,
+      type: 'email_verification',
+      expiresInMinutes: 60 * 24 * 2,
+    });
+
+    await this.mailService.sendEmailVerification(email, verifyEmailTokenDocument.token);
+  }
+
+  async createEmailVerificationSecurityToken(userId: string): Promise<string> {
+    await this.tokenModel.deleteMany({
+      userId,
+      type: 'email_verification_security',
+    });
+
+    const emailVerificationSecurityToken = await this.tokenService.createToken({
+      userId,
+      type: 'email_verification_security',
+      expiresInMinutes: 60,
+    });
+
+    return emailVerificationSecurityToken ? emailVerificationSecurityToken.token : null;
+  }
+
+  async verifyEmail(userId: string, verificationTokenDocument: IToken): Promise<{ success: boolean; data: string }> {
+    const user = await this.userModel.findOne({
+      _id: userId,
+      verificationEpoch: { $lte: verificationTokenDocument.createdAt },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    const updateResult = await this.userModel.updateOne(
+      { _id: userId },
+      {
+        verified: true,
+        verificationEpoch: new Date(),
+      },
+    );
+
+    await this.tokenModel.deleteMany({
+      userId,
+      type: ['email_verification', 'email_verification_security'],
+    });
+
+    const response = {
+      success: true,
+      data: '',
+    };
+
+    if (updateResult.matchedCount < 1) {
+      response.success = false;
+      response.data = 'User Not Found';
+
+      return response;
+    }
+
+    if (updateResult.matchedCount > 0 && updateResult.modifiedCount < 1) {
+      response.success = false;
+      response.data = 'Email Already Verified';
+
+      return response;
+    }
+
+    return {
+      success: true,
+      data: 'Email Verified Successfully',
+    };
   }
 
   async loginUser({ email, password }: LoginDto, session): Promise<IPublicUserData | Error> {
