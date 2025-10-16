@@ -119,26 +119,190 @@ export class Service {
     };
   }
 
-  async deleteProjectEntity(id: string) {
-    const entity = await this.keyModel.findOne({ id });
+  async deleteProjectEntities(userId: string, projectId: string, entityIds: string[]) {
+    const entities = await this.keyModel.find({
+      userId,
+      projectId,
+      id: entityIds,
+    });
 
-    if (!entity) {
+    if (!entities || entities.length < 1) {
       throw new NotFoundException('Entity not found');
     }
 
-    const { pathCache } = entity;
-
     const childrenEntitiesDeleteResult = await this.keyModel.deleteMany({
-      pathCache: new RegExp(`^${pathCache}/${id}`),
+      $or: entityIds.map((id) => ({ pathCache: { $regex: id, $options: 'i' } })),
+    });
+
+    const childrenValues = await this.keyValueModel.find({
+      $or: entityIds.map((id) => ({ pathCache: { $regex: id, $options: 'i' } })),
     });
 
     const childrenValuesDeleteResult = await this.keyValueModel.deleteMany({
-      pathCache: new RegExp(`^${pathCache}/${id}`),
+      $or: entityIds.map((id) => ({ pathCache: { $regex: id, $options: 'i' } })),
     });
 
-    const entityDeleteResult = await entity.deleteOne();
+    const entityDeleteResult = await this.keyModel.deleteMany({
+      userId,
+      projectId,
+      id: entityIds,
+    });
 
-    return entityDeleteResult;
+    return {
+      data: {
+        root: entityDeleteResult,
+        values: childrenValuesDeleteResult,
+        children: childrenEntitiesDeleteResult,
+      },
+    };
+  }
+
+  generateLabelForCopy(label: string): string {
+    const isFirstCopy = /copy$/.test(label);
+
+    if (isFirstCopy) {
+      return `${label} (1)`;
+    }
+
+    const indexedCopyMatch = label.match(/(\()(\d*)(\))$/gi);
+
+    if (indexedCopyMatch !== null) {
+      const index = 1 + parseInt(indexedCopyMatch[0].replace('(', '').replace(')', ''));
+
+      return label.replace(/(\()(\d*)(\))$/gi, `(${index})`);
+    }
+
+    return `${label} copy`;
+  }
+
+  async duplicateEntities(userId: string, projectId: string, entityIds: string[]) {
+    const rootEntities = await this.keyModel.find({
+      userId,
+      projectId,
+      id: entityIds,
+    });
+
+    if (!rootEntities || rootEntities.length < 1) {
+      throw new NotFoundException('Entity not found');
+    }
+
+    const createdAt = +new Date();
+
+    const rootIdToCloneIdMap = new Map();
+
+    const clonedRootEntitiesData = rootEntities.map((entity) => {
+      const { _id, ...data } = entity.toObject();
+
+      const newId = Math.random().toString(16).substring(2);
+
+      rootIdToCloneIdMap.set(data.id, newId);
+
+      return {
+        ...data,
+        id: newId,
+        label: this.generateLabelForCopy(data.label),
+        updatedAt: createdAt,
+        createdAt,
+      };
+    });
+
+    const clonedRootEntitiesOps = clonedRootEntitiesData.map((document) => ({ insertOne: { document } }));
+
+    await this.keyModel.bulkWrite(clonedRootEntitiesOps, { ordered: false });
+
+    const rootEntitiesValues = await this.keyValueModel
+      .find({
+        keyId: entityIds,
+      })
+      .lean();
+
+    const clonedRootEntityValues = rootEntitiesValues.map((document) => {
+      const { _id, keyId, pathCache, ...data } = document;
+
+      const cloneEntityId = rootIdToCloneIdMap.get(keyId);
+
+      return {
+        ...data,
+        id: Math.random().toString(16).substring(2),
+        keyId: cloneEntityId,
+        pathCache: pathCache.replace(keyId, cloneEntityId),
+      };
+    });
+
+    await this.keyValueModel.insertMany(clonedRootEntityValues);
+
+    /* Cloning Children Entities */
+
+    const childEntities = await this.keyModel
+      .find({
+        userId,
+        projectId,
+        pathCache: { $regex: entityIds.join('|'), $options: 'i' },
+      })
+      .lean();
+
+    const clonedChildEntitiesData = childEntities.map((entity) => {
+      const { _id, ...data } = entity;
+
+      const newId = Math.random().toString(16).substring(2);
+
+      rootIdToCloneIdMap.set(data.id, newId);
+
+      return {
+        ...data,
+        id: newId,
+        updatedAt: createdAt,
+        createdAt,
+      };
+    });
+
+    clonedChildEntitiesData.forEach((entity) => {
+      const { parentId, pathCache } = entity;
+
+      entity.parentId = rootIdToCloneIdMap.get(parentId);
+
+      const newPathCache = pathCache
+        .split('/')
+        .map((id) => (rootIdToCloneIdMap.has(id) ? rootIdToCloneIdMap.get(id) : id))
+        .join('/');
+
+      entity.pathCache = newPathCache;
+    });
+
+    const clonedChildEntitiesOps = clonedChildEntitiesData.map((document) => ({ insertOne: { document } }));
+
+    await this.keyModel.bulkWrite(clonedChildEntitiesOps, { ordered: false });
+
+    const childEntitiesValues = await this.keyValueModel
+      .find({
+        userId,
+        projectId,
+        pathCache: { $regex: entityIds.join('|'), $options: 'i' },
+      })
+      .lean();
+
+    const clonedChildEntitiesValuesData = childEntitiesValues.map((keyValue) => {
+      const { _id, parentId, keyId, pathCache, ...data } = keyValue;
+
+      const newPathCache = pathCache
+        .split('/')
+        .map((id) => (rootIdToCloneIdMap.has(id) ? rootIdToCloneIdMap.get(id) : id))
+        .join('/');
+
+      return {
+        ...data,
+        id: Math.random().toString(16).substring(2),
+        parentId: rootIdToCloneIdMap.get(parentId),
+        keyId: rootIdToCloneIdMap.get(keyId),
+        pathCache: newPathCache,
+      };
+    });
+
+    await this.keyValueModel.insertMany(clonedChildEntitiesValuesData);
+
+    return {
+      data: 'CLONING OK',
+    };
   }
 
   async getAggregatedValues(userId: string, projectId: string, parentIds: string[], keyIds?: string[]) {
@@ -817,9 +981,6 @@ export class Service {
   }
 
   async getMultipleEntitiesDataByParentId(projectId: string, parentId: string): Promise<IKey[]> {
-    console.log('projectId', projectId);
-    console.log('parentId', parentId);
-
     const result = await this.keyModel.find({ projectId, parentId });
 
     return result;

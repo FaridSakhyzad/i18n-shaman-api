@@ -26,6 +26,7 @@ import { UpdateLanguageDto } from './dto/update-language.dto';
 import { IKey } from './interfaces/key.interface';
 import { EStatusCode, IResponse } from '../interfaces';
 import { GetProjectByIdDto, TSortBy, TSortDirection } from './dto/get-project-by-id.dto';
+import { DeleteProjectEntitiesDto } from './dto/delete-entities.dto';
 
 @Controller()
 export class TransController {
@@ -142,15 +143,30 @@ export class TransController {
     });
   }
 
-  @Delete('deleteProjectEntity')
-  deleteProjectEntity(@Query('id') id: string, @Req() req) {
+  @Delete('deleteProjectEntities')
+  deleteProjectEntities(@Body() body: DeleteProjectEntitiesDto, @Req() req) {
     const { session, sessionID } = req;
 
     if (!session || !sessionID || !session.userId) {
       throw new UnauthorizedException('Error: Denied');
     }
 
-    return this.Service.deleteProjectEntity(id);
+    const { projectId, entityIds } = body;
+
+    return this.Service.deleteProjectEntities(session.userId, projectId, entityIds);
+  }
+
+  @Post('duplicateEntities')
+  duplicateEntities(@Body() body: DeleteProjectEntitiesDto, @Req() req) {
+    const { session, sessionID } = req;
+
+    if (!session || !sessionID || !session.userId) {
+      throw new UnauthorizedException('Error: Denied');
+    }
+
+    const { projectId, entityIds } = body;
+
+    return this.Service.duplicateEntities(session.userId, projectId, entityIds);
   }
 
   @Post('updateKey')

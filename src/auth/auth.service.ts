@@ -166,8 +166,6 @@ export class AuthService {
 
     const { _id, email, preferences } = user;
 
-    console.log('user', user);
-
     return {
       id: _id.toString(),
       email,
