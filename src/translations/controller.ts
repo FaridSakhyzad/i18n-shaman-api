@@ -27,6 +27,8 @@ import { IKey } from './interfaces/key.interface';
 import { EStatusCode, IResponse } from '../interfaces';
 import { GetProjectByIdDto, TSortBy, TSortDirection } from './dto/get-project-by-id.dto';
 import { DeleteProjectEntitiesDto } from './dto/delete-entities.dto';
+import { GetEntitiesChildrenByIdsDto } from './dto/get-entities-children-by-ids.dto';
+import { MoveProjectEntities } from './dto/MoveProjectEntities.dto';
 
 @Controller()
 export class TransController {
@@ -129,6 +131,19 @@ export class TransController {
     return this.Service.getEntityContent(projectId, userId, componentId);
   }
 
+  @Post('getEntitiesChildrenByIds')
+  getEntitiesChildrenByIds(@Body() getEntitiesChildrenByIdsDto: GetEntitiesChildrenByIdsDto, @Req() req) {
+    const { session, sessionID } = req;
+
+    if (!session || !sessionID || !session.userId) {
+      throw new UnauthorizedException('Error: Denied');
+    }
+
+    const { projectId, userId, ids } = getEntitiesChildrenByIdsDto;
+
+    return this.Service.getEntitiesChildrenByIds(projectId, userId, ids);
+  }
+
   @Post('createProjectEntity')
   createProjectEntity(@Body() createKeyEntity: CreateEntityDto, @Req() req) {
     const { session, sessionID } = req;
@@ -147,7 +162,7 @@ export class TransController {
   deleteProjectEntities(@Body() body: DeleteProjectEntitiesDto, @Req() req) {
     const { session, sessionID } = req;
 
-    if (!session || !sessionID || !session.userId) {
+    if (!session || !sessionID || !session.userId || !session.userLoggedIn) {
       throw new UnauthorizedException('Error: Denied');
     }
 
@@ -167,6 +182,19 @@ export class TransController {
     const { projectId, entityIds } = body;
 
     return this.Service.duplicateEntities(session.userId, projectId, entityIds);
+  }
+
+  @Post('moveEntities')
+  moveEntities(@Body() body: MoveProjectEntities, @Req() req) {
+    const { session, sessionID } = req;
+
+    if (!session || !sessionID || !session.userId || !session.userLoggedIn) {
+      throw new UnauthorizedException('Error: Denied');
+    }
+
+    const { userId, projectId, entityIds, destinationEntityId } = body;
+
+    return this.Service.moveEntities(userId, projectId, entityIds, destinationEntityId);
   }
 
   @Post('updateKey')

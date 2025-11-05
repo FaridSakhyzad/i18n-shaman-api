@@ -30,6 +30,7 @@ import { IRawLanguage } from './interfaces/rawLanguage.interface';
 import { IKeyValue } from './interfaces/keyValue.interface';
 import { KeyHelperService } from './keyHelper.service';
 import { GetProjectByIdDto } from './dto/get-project-by-id.dto';
+import { findIndex } from 'rxjs';
 
 @Injectable()
 export class Service {
@@ -305,6 +306,183 @@ export class Service {
     };
   }
 
+  getMovedPathCache(document, destinationDocument) {
+    return `${destinationDocument.pathCache}/${destinationDocument.parentId}`;
+  }
+
+  getMovedChildPathCache(document, destinationDocument: IKey) {
+    const { pathCache: originalPathCache, matchedRootId } = document;
+    const { pathCache: destinationPathCache } = destinationDocument;
+
+    const startIndex = originalPathCache.indexOf(matchedRootId);
+    return `${destinationPathCache}/${originalPathCache.substring(startIndex)}`;
+  }
+
+  async moveEntities(userId, projectId, entityIds, destinationEntityId) {
+    const destinationDocument = await this.keyModel
+      .findOne({
+        userId,
+        projectId,
+        id: destinationEntityId,
+      })
+      .lean();
+
+    const rootEntities = await this.keyModel
+      .find({
+        userId,
+        projectId,
+        id: entityIds,
+      })
+      .lean();
+
+    const rootEntitiesOps = rootEntities.map((document) => {
+      return {
+        updateOne: {
+          filter: {
+            _id: document._id,
+          },
+          update: {
+            $set: {
+              parentId: destinationEntityId,
+              pathCache: this.getMovedPathCache(document, destinationDocument),
+            },
+          },
+        },
+      };
+    });
+
+    await this.keyModel.bulkWrite(rootEntitiesOps, { ordered: false });
+
+    const rootEntitiesValues = await this.keyValueModel
+      .find({
+        userId,
+        projectId,
+        keyId: entityIds,
+      })
+      .lean();
+
+    const rootEntitiesValuesOps = rootEntitiesValues.map((document) => {
+      return {
+        updateOne: {
+          filter: {
+            _id: document._id,
+          },
+          update: {
+            $set: {
+              parentId: destinationEntityId,
+              pathCache: this.getMovedPathCache(document, destinationDocument),
+            },
+          },
+        },
+      };
+    });
+
+    await this.keyValueModel.bulkWrite(rootEntitiesValuesOps, { ordered: false });
+
+    /* MOVING CHILDREN */
+    const childEntities = await this.keyModel.aggregate([
+      { $match: { pathCache: { $regex: entityIds.join('|') } } },
+      {
+        $addFields: {
+          _match: {
+            $regexFind: {
+              input: '$pathCache',
+              regex: entityIds.join('|'),
+            },
+          },
+        },
+      },
+      {
+        $addFields: {
+          matchedRootId: '$_match.match',
+        },
+      },
+      {
+        $addFields: {
+          orderIndex: {
+            $indexOfArray: [entityIds, '$matchedRootId'],
+          },
+        },
+      },
+      {
+        $project: {
+          _match: 0,
+          orderIndex: 0,
+        },
+      },
+    ]);
+
+    const childEntitiesOps = childEntities.map((document) => {
+      return {
+        updateOne: {
+          filter: {
+            _id: document._id,
+          },
+          update: {
+            $set: {
+              pathCache: this.getMovedChildPathCache(document, destinationDocument),
+            },
+          },
+        },
+      };
+    });
+
+    await this.keyModel.bulkWrite(childEntitiesOps, { ordered: false });
+
+    const childEntitiesValues = await this.keyValueModel.aggregate([
+      { $match: { pathCache: { $regex: entityIds.join('|') } } },
+      {
+        $addFields: {
+          _match: {
+            $regexFind: {
+              input: '$pathCache',
+              regex: entityIds.join('|'),
+            },
+          },
+        },
+      },
+      {
+        $addFields: {
+          matchedRootId: '$_match.match',
+        },
+      },
+      {
+        $addFields: {
+          orderIndex: {
+            $indexOfArray: [entityIds, '$matchedRootId'],
+          },
+        },
+      },
+      {
+        $project: {
+          _match: 0,
+          orderIndex: 0,
+        },
+      },
+    ]);
+
+    const childEntitiesValuesOps = childEntitiesValues.map((document) => {
+      return {
+        updateOne: {
+          filter: {
+            _id: document._id,
+          },
+          update: {
+            $set: {
+              pathCache: this.getMovedChildPathCache(document, destinationDocument),
+            },
+          },
+        },
+      };
+    });
+
+    await this.keyModel.bulkWrite(childEntitiesValuesOps, { ordered: false });
+
+    return {
+      data: 'MOVING OK',
+    };
+  }
+
   async getAggregatedValues(userId: string, projectId: string, parentIds: string[], keyIds?: string[]) {
     const aggregatedValues = await this.keyValueModel.aggregate([
       {
@@ -446,7 +624,7 @@ export class Service {
     let upstreamParents: IKey[];
     let subfolderModel: IKey;
 
-    if (subFolderId) {
+    if (subFolderId && subFolderId !== projectId) {
       subfolderModel = await this.keyModel.findOne({ userId, projectId, id: subFolderId });
 
       const parentIds = subfolderModel.pathCache.replace('#', projectId).split('/');
@@ -694,7 +872,11 @@ export class Service {
         searchDbQueryParams.$regex = `^${searchQuery}$`;
       }
 
-      if (searchParamsData[ESearchParams.skipKeys] || searchParamsData[ESearchParams.skipFolders] || searchParamsData[ESearchParams.skipComponents]) {
+      if (
+        searchParamsData[ESearchParams.skipKeys] ||
+        searchParamsData[ESearchParams.skipFolders] ||
+        searchParamsData[ESearchParams.skipComponents]
+      ) {
         findParams.type = new Set(findParams.type || ['string', 'folder', 'component']);
 
         if (searchParamsData[ESearchParams.skipKeys]) {
@@ -732,10 +914,7 @@ export class Service {
       },
       {
         $match: {
-          $or: [
-            findParams,
-            { 'values.value': searchDbQueryParams }
-          ]
+          $or: [findParams, { 'values.value': searchDbQueryParams }],
         },
       },
       {
@@ -743,13 +922,8 @@ export class Service {
       },
       {
         $facet: {
-          items: [
-            { $skip: page * itemsPerPage },
-            { $limit: itemsPerPage },
-          ],
-          totalCount: [
-            { $count: 'count' }
-          ]
+          items: [{ $skip: page * itemsPerPage }, { $limit: itemsPerPage }],
+          totalCount: [{ $count: 'count' }],
         },
       },
     ]);
@@ -807,6 +981,16 @@ export class Service {
       keys,
       values: aggregatedValues[0],
     };
+  }
+
+  async getEntitiesChildrenByIds(projectId: string, userId: string, entityIds: string[]) {
+    const keys = await this.keyModel.find({
+      projectId,
+      userId,
+      parentId: entityIds,
+    });
+
+    return keys;
   }
 
   async addLanguage(addLanguageDto: AddLanguageDto) {
