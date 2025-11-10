@@ -319,28 +319,36 @@ export class Service {
   }
 
   async moveEntities(userId, projectId, entityIds, destinationEntityId) {
-    const destinationDocument = await this.keyModel
-      .findOne({
-        userId,
-        projectId,
-        id: destinationEntityId,
-      })
-      .lean();
+    const session = await this.keyModel.db.startSession();
 
-    const rootEntities = await this.keyModel
-      .find({
-        userId,
-        projectId,
-        id: entityIds,
-      })
-      .lean();
+    try {
+      await session.startTransaction();
 
-    const rootEntitiesOps = rootEntities.map((document) => {
-      return {
+      const destinationDocument = await this.keyModel
+        .findOne({
+          userId,
+          projectId,
+          id: destinationEntityId,
+        })
+        .session(session)
+        .lean();
+
+      if (!destinationDocument) {
+        throw new Error('Destination entity not found');
+      }
+
+      const rootEntities = await this.keyModel
+        .find({
+          userId,
+          projectId,
+          id: { $in: entityIds },
+        })
+        .session(session)
+        .lean();
+
+      const rootEntitiesOps = rootEntities.map((document) => ({
         updateOne: {
-          filter: {
-            _id: document._id,
-          },
+          filter: { _id: document._id },
           update: {
             $set: {
               parentId: destinationEntityId,
@@ -348,25 +356,27 @@ export class Service {
             },
           },
         },
-      };
-    });
+      }));
 
-    await this.keyModel.bulkWrite(rootEntitiesOps, { ordered: false });
+      if (rootEntitiesOps.length) {
+        await this.keyModel.bulkWrite(rootEntitiesOps, {
+          ordered: false,
+          session,
+        });
+      }
 
-    const rootEntitiesValues = await this.keyValueModel
-      .find({
-        userId,
-        projectId,
-        keyId: entityIds,
-      })
-      .lean();
+      const rootEntitiesValues = await this.keyValueModel
+        .find({
+          userId,
+          projectId,
+          keyId: { $in: entityIds },
+        })
+        .session(session)
+        .lean();
 
-    const rootEntitiesValuesOps = rootEntitiesValues.map((document) => {
-      return {
+      const rootEntitiesValuesOps = rootEntitiesValues.map((document) => ({
         updateOne: {
-          filter: {
-            _id: document._id,
-          },
+          filter: { _id: document._id },
           update: {
             $set: {
               parentId: destinationEntityId,
@@ -374,46 +384,53 @@ export class Service {
             },
           },
         },
-      };
-    });
+      }));
 
-    await this.keyValueModel.bulkWrite(rootEntitiesValuesOps, { ordered: false });
+      if (rootEntitiesValuesOps.length) {
+        await this.keyValueModel.bulkWrite(rootEntitiesValuesOps, {
+          ordered: false,
+          session,
+        });
+      }
 
-    /* MOVING CHILDREN */
-    const childEntities = await this.keyModel.aggregate([
-      { $match: { pathCache: { $regex: entityIds.join('|') } } },
-      {
-        $addFields: {
-          _match: {
-            $regexFind: {
-              input: '$pathCache',
-              regex: entityIds.join('|'),
+      // CHILD ENTITIES
+      const entityRegex = new RegExp(entityIds.join('|'));
+
+      const childEntities = await this.keyModel
+        .aggregate([
+          { $match: { pathCache: { $regex: entityRegex } } },
+          {
+            $addFields: {
+              _match: {
+                $regexFind: {
+                  input: '$pathCache',
+                  regex: entityRegex,
+                },
+              },
             },
           },
-        },
-      },
-      {
-        $addFields: {
-          matchedRootId: '$_match.match',
-        },
-      },
-      {
-        $addFields: {
-          orderIndex: {
-            $indexOfArray: [entityIds, '$matchedRootId'],
+          {
+            $addFields: {
+              matchedRootId: '$_match.match',
+            },
           },
-        },
-      },
-      {
-        $project: {
-          _match: 0,
-          orderIndex: 0,
-        },
-      },
-    ]);
+          {
+            $addFields: {
+              orderIndex: {
+                $indexOfArray: [entityIds, '$matchedRootId'],
+              },
+            },
+          },
+          {
+            $project: {
+              _match: 0,
+              orderIndex: 0,
+            },
+          },
+        ])
+        .session(session);
 
-    const childEntitiesOps = childEntities.map((document) => {
-      return {
+      const childEntitiesOps = childEntities.map((document) => ({
         updateOne: {
           filter: {
             _id: document._id,
@@ -424,45 +441,50 @@ export class Service {
             },
           },
         },
-      };
-    });
+      }));
 
-    await this.keyModel.bulkWrite(childEntitiesOps, { ordered: false });
+      if (childEntitiesOps.length) {
+        await this.keyModel.bulkWrite(childEntitiesOps, {
+          ordered: false,
+          session,
+        });
+      }
 
-    const childEntitiesValues = await this.keyValueModel.aggregate([
-      { $match: { pathCache: { $regex: entityIds.join('|') } } },
-      {
-        $addFields: {
-          _match: {
-            $regexFind: {
-              input: '$pathCache',
-              regex: entityIds.join('|'),
+      const childEntitiesValues = await this.keyValueModel
+        .aggregate([
+          { $match: { pathCache: { $regex: entityRegex } } },
+          {
+            $addFields: {
+              _match: {
+                $regexFind: {
+                  input: '$pathCache',
+                  regex: entityRegex,
+                },
+              },
             },
           },
-        },
-      },
-      {
-        $addFields: {
-          matchedRootId: '$_match.match',
-        },
-      },
-      {
-        $addFields: {
-          orderIndex: {
-            $indexOfArray: [entityIds, '$matchedRootId'],
+          {
+            $addFields: {
+              matchedRootId: '$_match.match',
+            },
           },
-        },
-      },
-      {
-        $project: {
-          _match: 0,
-          orderIndex: 0,
-        },
-      },
-    ]);
+          {
+            $addFields: {
+              orderIndex: {
+                $indexOfArray: [entityIds, '$matchedRootId'],
+              },
+            },
+          },
+          {
+            $project: {
+              _match: 0,
+              orderIndex: 0,
+            },
+          },
+        ])
+        .session(session);
 
-    const childEntitiesValuesOps = childEntitiesValues.map((document) => {
-      return {
+      const childEntitiesValuesOps = childEntitiesValues.map((document) => ({
         updateOne: {
           filter: {
             _id: document._id,
@@ -473,14 +495,23 @@ export class Service {
             },
           },
         },
-      };
-    });
+      }));
 
-    await this.keyModel.bulkWrite(childEntitiesValuesOps, { ordered: false });
+      if (childEntitiesValuesOps.length) {
+        await this.keyValueModel.bulkWrite(childEntitiesValuesOps, {
+          ordered: false,
+          session,
+        });
+      }
 
-    return {
-      data: 'MOVING OK',
-    };
+      await session.commitTransaction();
+      return { data: 'MOVING OK' };
+    } catch (err) {
+      await session.abortTransaction();
+      throw err;
+    } finally {
+      session.endSession();
+    }
   }
 
   async getAggregatedValues(userId: string, projectId: string, parentIds: string[], keyIds?: string[]) {
