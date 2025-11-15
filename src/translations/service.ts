@@ -306,16 +306,25 @@ export class Service {
     };
   }
 
-  getMovedRootEntitiesPathCache(destinationDocument) {
+  getMovedRootEntitiesPathCache(destinationDocument: IKey) {
     return `${destinationDocument.pathCache}/${destinationDocument.parentId}`;
   }
 
-  getMovedChildPathCache(document, destinationDocument: IKey) {
+  getMovedChildPathCache(document: IKey & { matchedRootId: string }, destinationDocument: IKey) {
     const { pathCache: originalPathCache, matchedRootId } = document;
     const { pathCache: destinationPathCache } = destinationDocument;
 
     const startIndex = originalPathCache.indexOf(matchedRootId);
-    return `${destinationPathCache}/${originalPathCache.substring(startIndex)}`;
+
+    const result = `${destinationPathCache}/${originalPathCache.substring(startIndex)}`;
+
+    console.log(' ');
+    console.log('matchedRootId: ', matchedRootId);
+    console.log('entity: ', document.label);
+
+    console.log('result', result);
+
+    return result;
   }
 
   async moveEntities(userId, projectId, entityIds, destinationEntityId) {
@@ -335,6 +344,8 @@ export class Service {
       })
       .lean();
 
+    const docIsMovingToRoot = projectId === destinationEntityId;
+
     const rootEntitiesOps = rootEntities.map((document) => {
       return {
         updateOne: {
@@ -344,7 +355,7 @@ export class Service {
           update: {
             $set: {
               parentId: destinationEntityId,
-              pathCache: this.getMovedRootEntitiesPathCache(destinationDocument),
+              pathCache: docIsMovingToRoot ? '#' : this.getMovedRootEntitiesPathCache(destinationDocument),
             },
           },
         },
@@ -370,7 +381,7 @@ export class Service {
           update: {
             $set: {
               parentId: destinationEntityId,
-              pathCache: this.getMovedRootEntitiesPathCache(destinationDocument),
+              pathCache: docIsMovingToRoot ? '#' : this.getMovedRootEntitiesPathCache(destinationDocument),
             },
           },
         },
@@ -420,7 +431,7 @@ export class Service {
           },
           update: {
             $set: {
-              pathCache: this.getMovedChildPathCache(document, destinationDocument),
+              pathCache: docIsMovingToRoot ? this.getMovedChildPathCache(document, { pathCache: '#' } as IKey) : this.getMovedChildPathCache(document, destinationDocument),
             },
           },
         },
@@ -469,7 +480,7 @@ export class Service {
           },
           update: {
             $set: {
-              pathCache: this.getMovedChildPathCache(document, destinationDocument),
+              pathCache: docIsMovingToRoot ? this.getMovedChildPathCache(document, { pathCache: '#' } as IKey) : this.getMovedChildPathCache(document, destinationDocument),
             },
           },
         },
