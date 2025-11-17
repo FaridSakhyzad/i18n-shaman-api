@@ -307,7 +307,7 @@ export class Service {
   }
 
   getMovedRootEntitiesPathCache(destinationDocument: IKey) {
-    return `${destinationDocument.pathCache}/${destinationDocument.parentId}`;
+    return `${destinationDocument.pathCache}/${destinationDocument.id}`;
   }
 
   getMovedChildPathCache(document: IKey & { matchedRootId: string }, destinationDocument: IKey) {
@@ -316,15 +316,11 @@ export class Service {
 
     const startIndex = originalPathCache.indexOf(matchedRootId);
 
-    const result = `${destinationPathCache}/${originalPathCache.substring(startIndex)}`;
+    const relativePathCache = originalPathCache.substring(startIndex);
 
-    console.log(' ');
-    console.log('matchedRootId: ', matchedRootId);
-    console.log('entity: ', document.label);
+    const destinationDocumentId = destinationDocument.id === '#' ? '' : `${destinationDocument.id}/`;
 
-    console.log('result', result);
-
-    return result;
+    return `${destinationPathCache}/${destinationDocumentId}${relativePathCache}`;
   }
 
   async moveEntities(userId, projectId, entityIds, destinationEntityId) {
@@ -381,7 +377,9 @@ export class Service {
           update: {
             $set: {
               parentId: destinationEntityId,
-              pathCache: docIsMovingToRoot ? '#' : this.getMovedRootEntitiesPathCache(destinationDocument),
+              pathCache: docIsMovingToRoot
+                ? `#/${document.keyId}`
+                : this.getMovedRootEntitiesPathCache(destinationDocument),
             },
           },
         },
@@ -431,7 +429,9 @@ export class Service {
           },
           update: {
             $set: {
-              pathCache: docIsMovingToRoot ? this.getMovedChildPathCache(document, { pathCache: '#' } as IKey) : this.getMovedChildPathCache(document, destinationDocument),
+              pathCache: docIsMovingToRoot
+                ? this.getMovedChildPathCache(document, { pathCache: '#', id: '#' } as IKey)
+                : this.getMovedChildPathCache(document, destinationDocument),
             },
           },
         },
@@ -480,14 +480,16 @@ export class Service {
           },
           update: {
             $set: {
-              pathCache: docIsMovingToRoot ? this.getMovedChildPathCache(document, { pathCache: '#' } as IKey) : this.getMovedChildPathCache(document, destinationDocument),
+              pathCache: docIsMovingToRoot
+                ? this.getMovedChildPathCache(document, { pathCache: '#', id: '#' } as IKey)
+                : this.getMovedChildPathCache(document, destinationDocument),
             },
           },
         },
       };
     });
 
-    await this.keyModel.bulkWrite(childEntitiesValuesOps, { ordered: false });
+    await this.keyValueModel.bulkWrite(childEntitiesValuesOps, { ordered: false });
 
     return {
       data: 'MOVING OK',
